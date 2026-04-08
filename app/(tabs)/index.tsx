@@ -4,7 +4,7 @@ import * as Location from "expo-location";
 import { useFocusEffect } from "@react-navigation/native";
 import { router } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 
 import { ScreenContainer } from "@/components/screen-container";
 import {
@@ -49,13 +49,13 @@ const DEFAULT_SETTINGS: AppSettings = {
   liveRouteSyncEnabled: true,
   selectedNavigationProvider: "tmap",
   arrowSize: "huge",
-  quickDestinations: ["집", "회사"],
+  quickDestinations: ["인천공항", "서울역"],
 };
 
 const ARROW_FONT_SIZE: Record<ArrowSize, number> = {
-  large: 96,
-  xlarge: 116,
-  huge: 138,
+  large: 118,
+  xlarge: 138,
+  huge: 164,
 };
 
 const PROVIDER_LABEL: Record<NavigationProvider, string> = {
@@ -104,23 +104,27 @@ const SIGNAL_META: Record<
   {
     title: string;
     label: string;
-    backgroundColor: string;
+    accent: string;
+    glow: string;
   }
 > = {
   red: {
     title: "STOP",
     label: "정지",
-    backgroundColor: "#FF4B2B",
+    accent: "#FF3B30",
+    glow: "rgba(255,59,48,0.34)",
   },
   yellow: {
     title: "SLOW",
     label: "주의",
-    backgroundColor: "#FDC830",
+    accent: "#FFCC00",
+    glow: "rgba(255,204,0,0.28)",
   },
   green: {
     title: "GO",
     label: "진행",
-    backgroundColor: "#80ff72",
+    accent: "#34C759",
+    glow: "rgba(52,199,89,0.30)",
   },
 };
 
@@ -153,6 +157,20 @@ const DIRECTION_META: Record<
     instruction: "안전 확인 후 유턴",
   },
 };
+
+const LANGUAGE_SAMPLES = [
+  { code: "KO", label: "안녕하세요" },
+  { code: "EN", label: "Hello" },
+  { code: "JA", label: "こんにちは" },
+  { code: "ZH", label: "你好" },
+  { code: "TH", label: "สวัสดี" },
+  { code: "VI", label: "Xin chào" },
+  { code: "MN", label: "Сайн байна уу" },
+  { code: "RU", label: "Здравствуйте" },
+  { code: "ES", label: "Hola" },
+  { code: "AR", label: "مرحبا" },
+  { code: "FR", label: "Bonjour" },
+];
 
 export default function HomeScreen() {
   const [signalIndex, setSignalIndex] = useState(0);
@@ -295,9 +313,9 @@ export default function HomeScreen() {
   const currentDirectionKey = DIRECTION_SEQUENCE[directionIndex] ?? "straight";
   const currentDirection = useMemo(() => DIRECTION_META[currentDirectionKey], [currentDirectionKey]);
   const arrowFontSize = ARROW_FONT_SIZE[arrowSize];
-  const displayedArrowFontSize = Math.min(arrowFontSize, 120);
+  const displayedArrowFontSize = Math.min(arrowFontSize, 164);
   const voiceLengthLabel = voiceAlertLength === "detailed" ? "상세" : "간략";
-  const voiceStyleLabel = voiceAlertStyle === "standard" ? "기본" : voiceAlertStyle === "calm" ? "차분" : "집중";
+  const voiceStyleLabel = voiceAlertStyle === "calm" ? "차분형" : "집중형";
   const voiceSettings = useMemo(
     () => ({
       enabled: voiceGuideEnabled,
@@ -316,71 +334,152 @@ export default function HomeScreen() {
 
   return (
     <ScreenContainer style={styles.screenContent}>
-      <View style={styles.root}>
-        <View style={styles.headerZone}>
-          <Text style={styles.headerText}>AI Omni-Drive</Text>
-          <Text style={styles.headerSubText}>{PROVIDER_LABEL[selectedNavigationProvider]}</Text>
-        </View>
-
-        <View style={styles.mainColumn}>
-          <View style={styles.visualZone}>
-            <View style={styles.cardShell}>
-              <View style={[styles.signalCard, { backgroundColor: currentSignal.backgroundColor }]}>
-                <View style={styles.signalHighlight} />
-                <Text style={styles.signalCardText}>{currentSignal.title}</Text>
-                <Text style={styles.signalCardSubText}>{currentSignal.label}</Text>
-              </View>
+      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+        <View style={styles.root}>
+          <View style={styles.heroHeader}>
+            <View>
+              <Text style={styles.heroEyebrow}>WHITE APPLE STANDARD</Text>
+              <Text style={styles.heroTitle}>AI Omni-Drive</Text>
+              <Text style={styles.heroSubtitle}>11개국어 스캔과 AI 운전 보조를 한 화면에서 바로 확인</Text>
+            </View>
+            <View style={styles.providerPill}>
+              <Text style={styles.providerPillText}>{PROVIDER_LABEL[selectedNavigationProvider]}</Text>
             </View>
           </View>
 
-          <View style={styles.infoZone}>
-            <View style={styles.cardShell}>
-              <View style={styles.infoCard}>
-                <View style={styles.infoBlock}>
-                  <Text style={styles.infoLabel}>남은 거리</Text>
-                  <Text style={styles.infoValue}>{distanceValue}</Text>
+          <View style={styles.heroGrid}>
+            <View style={styles.heroLeftColumn}>
+              <View style={[styles.liquidShell, styles.signalShell, { shadowColor: currentSignal.accent }]}> 
+                <View style={styles.signalCard}>
+                  <View style={[styles.signalHalo, { backgroundColor: currentSignal.glow }]} />
+                  <View style={[styles.signalBadge, { backgroundColor: currentSignal.accent, shadowColor: currentSignal.accent }]}> 
+                    <Text style={styles.signalBadgeLabel}>실시간 신호</Text>
+                  </View>
+                  <Text style={styles.signalCardText}>{currentSignal.title}</Text>
+                  <Text style={styles.signalCardSubText}>{currentSignal.label}</Text>
                 </View>
+              </View>
 
-                <View style={styles.infoDivider} />
-
-                <View style={styles.infoBlock}>
-                  <Text style={styles.infoLabel}>현재 속도</Text>
-                  <Text style={styles.infoValue}>{speedValue}</Text>
+              <View style={[styles.liquidShell, styles.metricsShell]}>
+                <View style={styles.metricsCard}>
+                  <View style={styles.metricBlock}>
+                    <Text style={styles.metricLabel}>남은 거리</Text>
+                    <Text style={styles.metricValue}>{distanceValue}</Text>
+                  </View>
+                  <View style={styles.metricDivider} />
+                  <View style={styles.metricBlock}>
+                    <Text style={styles.metricLabel}>현재 속도</Text>
+                    <Text style={styles.metricValue}>{speedValue}</Text>
+                  </View>
                 </View>
               </View>
             </View>
-          </View>
 
-          <View style={styles.naviZone}>
             <Pressable
               accessibilityRole="button"
               accessibilityLabel="내비게이션 방향 전환"
               onPress={handleAdvanceDirection}
-              style={({ pressed }) => [styles.cardShell, styles.naviShell, pressed && styles.controlButtonPressed]}
+              style={({ pressed }) => [styles.liquidShell, styles.directionShell, pressed && styles.controlButtonPressed]}
             >
-              <View style={styles.naviCard}>
+              <View style={styles.directionCard}>
                 <Text
                   style={[
                     styles.naviArrowText,
-                    { fontSize: displayedArrowFontSize, lineHeight: displayedArrowFontSize + 2 },
+                    { fontSize: displayedArrowFontSize, lineHeight: displayedArrowFontSize + 8 },
                   ]}
                 >
                   {currentDirection.symbol}
                 </Text>
-                <Text numberOfLines={1} style={styles.naviText}>{currentDirection.label}</Text>
+                <Text style={styles.naviText}>{currentDirection.label}</Text>
+                <Text style={styles.directionInstruction}>{currentDirection.instruction}</Text>
               </View>
             </Pressable>
           </View>
 
-          <View style={styles.bottomBarZone}>
+          <View style={[styles.liquidShell, styles.showcaseShell]}>
+            <View style={styles.showcaseHeaderRow}>
+              <View>
+                <Text style={styles.sectionEyebrow}>SAMPLE SHOWCASE</Text>
+                <Text style={styles.sectionTitle}>11개국어 스캔</Text>
+              </View>
+              <View style={styles.liveBadge}>
+                <Text style={styles.liveBadgeText}>OCR LIVE</Text>
+              </View>
+            </View>
+
+            <Text style={styles.sectionSummary}>
+              메뉴, 표지판, 계약서 핵심 문장을 Vision AI로 즉시 읽고 큰 글씨로 번역해 보여주는 샘플입니다.
+            </Text>
+
+            <View style={styles.languageGrid}>
+              {LANGUAGE_SAMPLES.map((item) => (
+                <View key={item.code} style={styles.languageChip}>
+                  <Text style={styles.languageCode}>{item.code}</Text>
+                  <Text numberOfLines={1} style={styles.languageLabel}>{item.label}</Text>
+                </View>
+              ))}
+            </View>
+          </View>
+
+          <View style={[styles.liquidShell, styles.driveShowcaseShell]}>
+            <View style={styles.showcaseHeaderRow}>
+              <View>
+                <Text style={styles.sectionEyebrow}>AI DRIVE ASSIST</Text>
+                <Text style={styles.sectionTitle}>AI 운전 보조 실시간 디스플레이</Text>
+              </View>
+              <View style={styles.liveBadge}>
+                <Text style={styles.liveBadgeText}>LIVE</Text>
+              </View>
+            </View>
+
+            <View style={styles.statusRow}>
+              <View style={styles.statusCard}>
+                <Text style={styles.statusLabel}>GPS 상태</Text>
+                <Text style={styles.statusValue}>{locationStatus}</Text>
+              </View>
+              <View style={styles.statusCard}>
+                <Text style={styles.statusLabel}>좌표</Text>
+                <Text numberOfLines={1} style={styles.statusValue}>{locationCoordsText}</Text>
+              </View>
+            </View>
+
+            <View style={styles.statusRow}>
+              <View style={styles.statusCard}>
+                <Text style={styles.statusLabel}>음성 가이드</Text>
+                <Text style={styles.statusValue}>{voiceGuideEnabled ? "활성" : "비활성"}</Text>
+              </View>
+              <View style={styles.statusCard}>
+                <Text style={styles.statusLabel}>알림 모드</Text>
+                <Text style={styles.statusValue}>{`${voiceLengthLabel} · ${voiceStyleLabel}`}</Text>
+              </View>
+            </View>
+
+            <View style={styles.voicePreviewCard}>
+              <Text style={styles.voicePreviewLabel}>AI 음성 예고</Text>
+              <Text style={styles.voicePreviewText}>{voicePreviewText}</Text>
+            </View>
+
+            <View style={styles.quickInfoRow}>
+              <View style={styles.quickInfoCard}>
+                <Text style={styles.quickInfoLabel}>빠른 목적지</Text>
+                <Text style={styles.quickInfoValue}>{`${quickDestinationCount}개 준비`}</Text>
+              </View>
+              <View style={styles.quickInfoCard}>
+                <Text style={styles.quickInfoLabel}>실시간 경로 동기화</Text>
+                <Text style={styles.quickInfoValue}>{liveRouteSyncEnabled ? "자동" : "수동"}</Text>
+              </View>
+            </View>
+          </View>
+
+          <View style={[styles.liquidShell, styles.bottomBarShell]}>
             <View style={styles.bottomBar}>
               <Pressable
                 accessibilityRole="button"
                 onPress={() => router.push("/camera")}
                 style={({ pressed }) => [styles.controlButton, pressed && styles.controlButtonPressed]}
               >
-                <MaterialIcons name="photo-camera" size={22} color="#11161d" />
-                <Text numberOfLines={1} style={styles.controlText}>카메라</Text>
+                <MaterialIcons name="photo-camera" size={28} color="#1F2937" />
+                <Text style={styles.controlText}>카메라</Text>
               </Pressable>
 
               <Pressable
@@ -388,8 +487,8 @@ export default function HomeScreen() {
                 onPress={() => router.push("/")}
                 style={({ pressed }) => [styles.controlButton, pressed && styles.controlButtonPressed]}
               >
-                <MaterialIcons name="home" size={22} color="#11161d" />
-                <Text numberOfLines={1} style={styles.controlText}>홈</Text>
+                <MaterialIcons name="home" size={28} color="#1F2937" />
+                <Text style={styles.controlText}>홈</Text>
               </Pressable>
 
               <Pressable
@@ -397,14 +496,13 @@ export default function HomeScreen() {
                 onPress={() => router.push("/settings")}
                 style={({ pressed }) => [styles.controlButton, pressed && styles.controlButtonPressed]}
               >
-                <MaterialIcons name="settings" size={22} color="#11161d" />
-                <Text numberOfLines={1} style={styles.controlText}>설정</Text>
+                <MaterialIcons name="settings" size={28} color="#1F2937" />
+                <Text style={styles.controlText}>설정</Text>
               </Pressable>
             </View>
           </View>
-
         </View>
-      </View>
+      </ScrollView>
     </ScreenContainer>
   );
 }
@@ -412,211 +510,413 @@ export default function HomeScreen() {
 const styles = StyleSheet.create({
   screenContent: {
     flex: 1,
-    backgroundColor: "#05070b",
+    backgroundColor: "#F5F7FB",
+  },
+  scrollContent: {
+    flexGrow: 1,
   },
   root: {
     flex: 1,
-    backgroundColor: "#05070b",
-    paddingHorizontal: 10,
-    paddingTop: 8,
-    paddingBottom: 10,
+    backgroundColor: "#F5F7FB",
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    paddingBottom: 20,
+    gap: 16,
   },
-  headerZone: {
-    paddingBottom: 6,
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 1,
+  heroHeader: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    justifyContent: "space-between",
+    gap: 12,
   },
-  headerText: {
-    fontSize: 12,
-    fontWeight: "600",
-    color: "#717887",
-    letterSpacing: 0.2,
+  heroEyebrow: {
+    fontSize: 13,
+    fontWeight: "900",
+    color: "#8A93A5",
+    letterSpacing: 1.2,
   },
-  headerSubText: {
-    fontSize: 11,
-    fontWeight: "600",
-    color: "#8f98a4",
+  heroTitle: {
+    marginTop: 6,
+    fontSize: 34,
+    lineHeight: 38,
+    fontWeight: "900",
+    color: "#121826",
   },
-  mainColumn: {
-    flex: 1,
-    flexDirection: "column",
-    gap: 10,
+  heroSubtitle: {
+    marginTop: 8,
+    fontSize: 18,
+    lineHeight: 24,
+    fontWeight: "800",
+    color: "#556070",
+    maxWidth: 250,
   },
-  visualZone: {
-    flex: 2.12,
-    justifyContent: "center",
-  },
-  cardShell: {
-    flex: 1,
-    padding: 2,
-    borderRadius: 30,
-    backgroundColor: "#9098a3",
+  providerPill: {
+    borderRadius: 999,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    backgroundColor: "#FFFFFF",
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.14)",
-    shadowColor: "#000000",
-    shadowOpacity: 0.32,
-    shadowRadius: 16,
-    shadowOffset: { width: 0, height: 10 },
-    elevation: 8,
+    borderColor: "rgba(255,255,255,0.95)",
+    shadowColor: "#B9C2D0",
+    shadowOpacity: 0.28,
+    shadowRadius: 12,
+    shadowOffset: { width: -4, height: -4 },
+    elevation: 3,
+  },
+  providerPillText: {
+    fontSize: 14,
+    fontWeight: "900",
+    color: "#475467",
+  },
+  heroGrid: {
+    flexDirection: "row",
+    gap: 14,
+  },
+  heroLeftColumn: {
+    flex: 1.05,
+    gap: 14,
+  },
+  liquidShell: {
+    padding: 2,
+    borderRadius: 32,
+    backgroundColor: "#D9DEE7",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.96)",
+    shadowColor: "#B9C2D0",
+    shadowOpacity: 0.24,
+    shadowRadius: 20,
+    shadowOffset: { width: -6, height: -6 },
+    elevation: 5,
+  },
+  signalShell: {
+    minHeight: 232,
   },
   signalCard: {
-    flex: 1,
-    borderRadius: 28,
+    minHeight: 228,
+    borderRadius: 30,
+    backgroundColor: "#FFFFFF",
     alignItems: "center",
     justifyContent: "center",
-    paddingHorizontal: 24,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.5)",
+    paddingHorizontal: 22,
     overflow: "hidden",
   },
-  signalHighlight: {
+  signalHalo: {
     position: "absolute",
-    top: 8,
-    left: 10,
-    right: 10,
-    height: 12,
+    top: 18,
+    left: 18,
+    right: 18,
+    height: 86,
     borderRadius: 999,
-    backgroundColor: "rgba(255,255,255,0.28)",
   },
-  signalCardText: {
-    fontSize: 34,
-    fontWeight: "900",
-    color: "#f8fbff",
-    letterSpacing: 0.4,
-    textShadowColor: "rgba(0,0,0,0.12)",
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 1,
-  },
-  signalCardSubText: {
-    marginTop: 10,
-    fontSize: 18,
-    fontWeight: "800",
-    color: "#f8fbff",
-  },
-  infoZone: {
-    flex: 1.28,
-    justifyContent: "center",
-  },
-  infoCard: {
-    flex: 1,
-    borderRadius: 28,
-    backgroundColor: "#d9dbe0",
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.65)",
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
+  signalBadge: {
     paddingHorizontal: 16,
-    columnGap: 10,
-  },
-  infoBlock: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  infoDivider: {
-    width: 1,
-    alignSelf: "stretch",
-    backgroundColor: "#b6bcc5",
-    marginVertical: 22,
-  },
-  infoLabel: {
-    fontSize: 17,
-    fontWeight: "700",
-    color: "#5f6672",
-    textAlign: "center",
-    lineHeight: 21,
-  },
-  infoValue: {
-    marginTop: 10,
-    fontSize: 20,
-    fontWeight: "900",
-    color: "#161b22",
-    textAlign: "center",
-    lineHeight: 24,
-  },
-  naviZone: {
-    flex: 1.1,
-    justifyContent: "center",
-  },
-  naviShell: {
-    padding: 2,
-  },
-  naviCard: {
-    flex: 1,
-    borderRadius: 28,
-    backgroundColor: "#d7d9df",
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.65)",
-    alignItems: "center",
-    justifyContent: "center",
-    paddingHorizontal: 18,
-    paddingVertical: 10,
-  },
-  naviArrowText: {
-    marginTop: -4,
-    fontWeight: "800",
-    color: "#2b3240",
-    textAlign: "center",
-  },
-  naviText: {
-    marginTop: -12,
-    fontSize: 18,
-    fontWeight: "800",
-    color: "#1e2430",
-  },
-  bottomBarZone: {
-    flex: 0.46,
-    justifyContent: "center",
-  },
-  bottomBar: {
-    flex: 1,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    borderRadius: 20,
-    backgroundColor: "#cfd3da",
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.7)",
-    paddingHorizontal: 10,
-    columnGap: 8,
-    shadowColor: "#000000",
-    shadowOpacity: 0.18,
-    shadowRadius: 10,
+    paddingVertical: 8,
+    borderRadius: 999,
+    shadowOpacity: 0.3,
+    shadowRadius: 12,
     shadowOffset: { width: 0, height: 6 },
     elevation: 4,
   },
-  controlButton: {
+  signalBadgeLabel: {
+    fontSize: 14,
+    fontWeight: "900",
+    color: "#FFFFFF",
+    letterSpacing: 0.6,
+  },
+  signalCardText: {
+    marginTop: 18,
+    fontSize: 52,
+    lineHeight: 56,
+    fontWeight: "900",
+    color: "#111827",
+    textAlign: "center",
+  },
+  signalCardSubText: {
+    marginTop: 10,
+    fontSize: 26,
+    lineHeight: 30,
+    fontWeight: "900",
+    color: "#364152",
+    textAlign: "center",
+  },
+  metricsShell: {
+    minHeight: 134,
+  },
+  metricsCard: {
+    minHeight: 130,
+    borderRadius: 30,
+    backgroundColor: "#FDFEFF",
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 14,
+  },
+  metricBlock: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  metricDivider: {
+    width: 1,
+    alignSelf: "stretch",
+    backgroundColor: "#D5DBE5",
+    marginVertical: 18,
+  },
+  metricLabel: {
+    fontSize: 18,
+    lineHeight: 22,
+    fontWeight: "900",
+    color: "#6B7280",
+    textAlign: "center",
+  },
+  metricValue: {
+    marginTop: 10,
+    fontSize: 28,
+    lineHeight: 32,
+    fontWeight: "900",
+    color: "#0F172A",
+    textAlign: "center",
+  },
+  directionShell: {
+    flex: 0.95,
+    minHeight: 382,
+  },
+  directionCard: {
+    flex: 1,
+    minHeight: 378,
+    borderRadius: 30,
+    backgroundColor: "#FBFCFE",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 20,
+    paddingVertical: 18,
+  },
+  naviArrowText: {
+    marginTop: -6,
+    fontWeight: "900",
+    color: "#E5E7EB",
+    textAlign: "center",
+    textShadowColor: "rgba(17,24,39,0.28)",
+    textShadowOffset: { width: 0, height: 8 },
+    textShadowRadius: 10,
+  },
+  naviText: {
+    marginTop: -10,
+    fontSize: 34,
+    lineHeight: 38,
+    fontWeight: "900",
+    color: "#111827",
+    textAlign: "center",
+  },
+  directionInstruction: {
+    marginTop: 12,
+    fontSize: 20,
+    lineHeight: 26,
+    fontWeight: "800",
+    color: "#5B6472",
+    textAlign: "center",
+  },
+  showcaseShell: {
+    minHeight: 250,
+  },
+  driveShowcaseShell: {
+    minHeight: 286,
+  },
+  showcaseHeaderRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
+    paddingHorizontal: 18,
+    paddingTop: 18,
+  },
+  sectionEyebrow: {
+    fontSize: 13,
+    fontWeight: "900",
+    color: "#8A93A5",
+    letterSpacing: 1.1,
+  },
+  sectionTitle: {
+    marginTop: 6,
+    fontSize: 30,
+    lineHeight: 34,
+    fontWeight: "900",
+    color: "#121826",
+  },
+  liveBadge: {
+    borderRadius: 999,
+    backgroundColor: "#EDF2FF",
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderWidth: 1,
+    borderColor: "#D6E4FF",
+  },
+  liveBadgeText: {
+    fontSize: 13,
+    fontWeight: "900",
+    color: "#2855CC",
+  },
+  sectionSummary: {
+    marginTop: 12,
+    paddingHorizontal: 18,
+    fontSize: 18,
+    lineHeight: 24,
+    fontWeight: "800",
+    color: "#556070",
+  },
+  languageGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 10,
+    paddingHorizontal: 18,
+    paddingTop: 16,
+    paddingBottom: 18,
+  },
+  languageChip: {
     width: "31%",
-    flexBasis: "31%",
-    flexGrow: 0,
-    flexShrink: 0,
+    minWidth: 98,
+    borderRadius: 20,
+    backgroundColor: "#FFFFFF",
+    paddingHorizontal: 12,
+    paddingVertical: 14,
+    borderWidth: 1,
+    borderColor: "#E6EBF2",
+    shadowColor: "#C4CCD8",
+    shadowOpacity: 0.18,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 2,
+  },
+  languageCode: {
+    fontSize: 14,
+    lineHeight: 18,
+    fontWeight: "900",
+    color: "#2855CC",
+  },
+  languageLabel: {
+    marginTop: 6,
+    fontSize: 18,
+    lineHeight: 22,
+    fontWeight: "900",
+    color: "#1F2937",
+  },
+  statusRow: {
+    flexDirection: "row",
+    gap: 10,
+    paddingHorizontal: 18,
+    paddingTop: 14,
+  },
+  statusCard: {
+    flex: 1,
+    borderRadius: 22,
+    backgroundColor: "#FFFFFF",
+    paddingHorizontal: 14,
+    paddingVertical: 14,
+    borderWidth: 1,
+    borderColor: "#E7ECF3",
+  },
+  statusLabel: {
+    fontSize: 15,
+    lineHeight: 19,
+    fontWeight: "900",
+    color: "#7A8394",
+  },
+  statusValue: {
+    marginTop: 8,
+    fontSize: 20,
+    lineHeight: 25,
+    fontWeight: "900",
+    color: "#111827",
+  },
+  voicePreviewCard: {
+    marginHorizontal: 18,
+    marginTop: 14,
+    borderRadius: 24,
+    backgroundColor: "#FFFFFF",
+    paddingHorizontal: 16,
+    paddingVertical: 16,
+    borderWidth: 1,
+    borderColor: "#E6EBF2",
+  },
+  voicePreviewLabel: {
+    fontSize: 15,
+    lineHeight: 19,
+    fontWeight: "900",
+    color: "#7A8394",
+  },
+  voicePreviewText: {
+    marginTop: 8,
+    fontSize: 21,
+    lineHeight: 28,
+    fontWeight: "900",
+    color: "#111827",
+  },
+  quickInfoRow: {
+    flexDirection: "row",
+    gap: 10,
+    paddingHorizontal: 18,
+    paddingTop: 14,
+    paddingBottom: 18,
+  },
+  quickInfoCard: {
+    flex: 1,
+    borderRadius: 22,
+    backgroundColor: "#FFFFFF",
+    paddingHorizontal: 14,
+    paddingVertical: 14,
+    borderWidth: 1,
+    borderColor: "#E7ECF3",
+  },
+  quickInfoLabel: {
+    fontSize: 15,
+    lineHeight: 19,
+    fontWeight: "900",
+    color: "#7A8394",
+  },
+  quickInfoValue: {
+    marginTop: 8,
+    fontSize: 20,
+    lineHeight: 25,
+    fontWeight: "900",
+    color: "#111827",
+  },
+  bottomBarShell: {
+    borderRadius: 28,
+  },
+  bottomBar: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    borderRadius: 26,
+    backgroundColor: "#FDFEFF",
+  },
+  controlButton: {
+    flex: 1,
+    minHeight: 68,
+    borderRadius: 22,
+    backgroundColor: "#FFFFFF",
+    borderWidth: 1,
+    borderColor: "#E6EBF2",
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: 5,
-    paddingVertical: 7,
-    borderRadius: 15,
-    backgroundColor: "#eef1f5",
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.88)",
-    shadowColor: "#6b7280",
+    gap: 8,
+    shadowColor: "#C4CCD8",
     shadowOpacity: 0.18,
-    shadowRadius: 6,
-    shadowOffset: { width: -2, height: -2 },
-    elevation: 3,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 2,
   },
   controlButtonPressed: {
-    opacity: 0.84,
+    opacity: 0.9,
     transform: [{ scale: 0.985 }],
   },
   controlText: {
-    fontSize: 14,
-    lineHeight: 17,
-    fontWeight: "800",
-    color: "#11161d",
-    textAlign: "center",
-    flexShrink: 1,
+    fontSize: 20,
+    lineHeight: 24,
+    fontWeight: "900",
+    color: "#111827",
   },
 });
