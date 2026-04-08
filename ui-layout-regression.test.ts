@@ -16,7 +16,7 @@ describe("home hud layout regression", () => {
 
   it("keeps the large traffic signal card with rotating go slow stop states", () => {
     expect(homeSource).toContain('const [signalIndex, setSignalIndex] = useState(0);');
-    expect(homeSource).toContain('1800');
+    expect(homeSource).toContain('10000');
     expect(homeSource).toContain('title: "GO"');
     expect(homeSource).toContain('title: "SLOW"');
     expect(homeSource).toContain('title: "STOP"');
@@ -37,7 +37,7 @@ describe("home hud layout regression", () => {
 
   it("keeps the centered bold direction arrow card and manual direction switch", () => {
     expect(homeSource).toContain('type DirectionState = "left" | "straight" | "right" | "uturn";');
-    expect(homeSource).toContain('2600');
+    expect(homeSource).toContain('12000');
     expect(homeSource).toContain('const handleAdvanceDirection = () => {');
     expect(homeSource).toContain('onPress={handleAdvanceDirection}');
     expect(homeSource).toContain('symbol: "↑"');

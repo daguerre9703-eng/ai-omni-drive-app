@@ -202,7 +202,7 @@ export default function HomeScreen() {
   useEffect(() => {
     const interval = setInterval(() => {
       setSignalIndex((prev) => (prev + 1) % SIGNAL_SEQUENCE.length);
-    }, 1800);
+    }, 10000);
 
     return () => clearInterval(interval);
   }, []);
@@ -214,7 +214,7 @@ export default function HomeScreen() {
 
     const interval = setInterval(() => {
       setDirectionIndex((prev) => (prev + 1) % DIRECTION_SEQUENCE.length);
-    }, 2600);
+    }, 12000);
 
     return () => clearInterval(interval);
   }, [liveRouteSyncEnabled]);
@@ -244,8 +244,8 @@ export default function HomeScreen() {
             distanceInterval: 5,
           },
           (location) => {
-            const routePoint = GPS_ROUTE_POINTS[routeIndexRef.current % GPS_ROUTE_POINTS.length];
-            routeIndexRef.current += 1;
+            const routePoint = GPS_ROUTE_POINTS[0];
+            routeIndexRef.current = 0;
 
             setDistanceValue(routePoint.signalDistanceLabel);
             const speedKmh = typeof location.coords.speed === "number" && location.coords.speed > 0
@@ -424,7 +424,7 @@ const styles = StyleSheet.create({
   },
   mainStack: {
     flex: 1,
-    gap: 10,
+    gap: 12,
     paddingTop: 6,
   },
   cardShell: {
@@ -444,7 +444,7 @@ const styles = StyleSheet.create({
     transform: [{ scale: 0.992 }],
   },
   signalCard: {
-    minHeight: 180,
+    minHeight: 214,
     borderRadius: 20,
     alignItems: "center",
     justifyContent: "center",
@@ -473,7 +473,7 @@ const styles = StyleSheet.create({
     textShadowRadius: 2,
   },
   infoCard: {
-    minHeight: 112,
+    minHeight: 126,
     borderRadius: 20,
     backgroundColor: "#D4D7DD",
     flexDirection: "row",
@@ -507,7 +507,7 @@ const styles = StyleSheet.create({
     textAlign: "center",
   },
   directionCard: {
-    minHeight: 168,
+    minHeight: 186,
     borderRadius: 20,
     backgroundColor: "#D4D7DD",
     alignItems: "center",
@@ -527,7 +527,7 @@ const styles = StyleSheet.create({
     textAlign: "center",
   },
   bottomBarShell: {
-    marginTop: 10,
+    marginTop: 4,
     borderRadius: 18,
     padding: 2,
     backgroundColor: "#AEB3BB",
