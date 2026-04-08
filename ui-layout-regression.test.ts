@@ -36,7 +36,7 @@ describe("home hud layout regression", () => {
   });
 
   it("cycles navigation direction states automatically and supports manual switching", () => {
-    expect(homeSource).toContain('type DirectionState = "left" | "straight" | "right";');
+    expect(homeSource).toContain('type DirectionState = "left" | "straight" | "right" | "uturn";');
     expect(homeSource).toContain('const [directionIndex, setDirectionIndex] = useState(0);');
     expect(homeSource).toContain('const interval = setInterval(() => {');
     expect(homeSource).toContain('2200');
@@ -45,6 +45,7 @@ describe("home hud layout regression", () => {
     expect(homeSource).toContain('label: "좌회전"');
     expect(homeSource).toContain('label: "직진"');
     expect(homeSource).toContain('label: "우회전"');
+    expect(homeSource).toContain('label: "유턴"');
   });
 
   it("shows large accessible driving information and controls", () => {

@@ -1,46 +1,111 @@
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import MaterialIcons from "@expo/vector-icons/MaterialIcons";
+import * as Linking from "expo-linking";
+import * as Location from "expo-location";
+import { useFocusEffect } from "@react-navigation/native";
 import { router } from "expo-router";
-import { useEffect, useMemo, useState } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Platform, Pressable, StyleSheet, Text, View } from "react-native";
 
 import { ScreenContainer } from "@/components/screen-container";
 
 type SignalState = "red" | "yellow" | "green";
+type DirectionState = "left" | "straight" | "right" | "uturn";
+type NavigationProvider = "kakaomap" | "inavi" | "tmap";
+type ArrowSize = "large" | "xlarge" | "huge";
 
-type DirectionState = "left" | "straight" | "right";
+type AppSettings = {
+  voiceGuideEnabled: boolean;
+  liveRouteSyncEnabled: boolean;
+  selectedNavigationProvider: NavigationProvider;
+  arrowSize: ArrowSize;
+  quickDestinations: string[];
+};
 
+type RoutePoint = {
+  latitude: number;
+  longitude: number;
+  signalDistance: string;
+  speed: string;
+  direction: DirectionState;
+};
+
+const SETTINGS_STORAGE_KEY = "ai-omni-drive:settings";
 const SIGNAL_SEQUENCE: SignalState[] = ["red", "yellow", "green"];
-const DIRECTION_SEQUENCE: DirectionState[] = ["left", "straight", "right"];
+const DIRECTION_SEQUENCE: DirectionState[] = ["left", "straight", "right", "uturn"];
+
+const DEFAULT_SETTINGS: AppSettings = {
+  voiceGuideEnabled: true,
+  liveRouteSyncEnabled: true,
+  selectedNavigationProvider: "tmap",
+  arrowSize: "huge",
+  quickDestinations: ["집", "회사"],
+};
+
+const ARROW_FONT_SIZE: Record<ArrowSize, number> = {
+  large: 96,
+  xlarge: 116,
+  huge: 138,
+};
+
+const PROVIDER_LABEL: Record<NavigationProvider, string> = {
+  kakaomap: "카카오맵 연동",
+  inavi: "아이나비 연동",
+  tmap: "티맵 연동",
+};
+
+const GPS_ROUTE_POINTS: RoutePoint[] = [
+  {
+    latitude: 37.5665,
+    longitude: 126.978,
+    signalDistance: "128m",
+    speed: "18 km/h",
+    direction: "left",
+  },
+  {
+    latitude: 37.5669,
+    longitude: 126.9787,
+    signalDistance: "102m",
+    speed: "24 km/h",
+    direction: "straight",
+  },
+  {
+    latitude: 37.5672,
+    longitude: 126.9796,
+    signalDistance: "76m",
+    speed: "31 km/h",
+    direction: "right",
+  },
+  {
+    latitude: 37.567,
+    longitude: 126.9803,
+    signalDistance: "40m",
+    speed: "12 km/h",
+    direction: "uturn",
+  },
+];
 
 const SIGNAL_META: Record<
   SignalState,
   {
     title: string;
     label: string;
-    distance: string;
-    speed: string;
     backgroundColor: string;
   }
 > = {
   red: {
     title: "STOP",
     label: "정지",
-    distance: "128m",
-    speed: "18 km/h",
     backgroundColor: "#FF4B2B",
   },
   yellow: {
     title: "SLOW",
     label: "주의",
-    distance: "96m",
-    speed: "31 km/h",
     backgroundColor: "#FDC830",
   },
   green: {
     title: "GO",
     label: "진행",
-    distance: "64m",
-    speed: "43 km/h",
     backgroundColor: "#80ff72",
   },
 };
@@ -48,27 +113,101 @@ const SIGNAL_META: Record<
 const DIRECTION_META: Record<
   DirectionState,
   {
-    icon: keyof typeof MaterialIcons.glyphMap;
+    symbol: string;
     label: string;
+    instruction: string;
   }
 > = {
   left: {
-    icon: "turn-left",
+    symbol: "←",
     label: "좌회전",
+    instruction: "다음 교차로에서 좌회전",
   },
   straight: {
-    icon: "straight",
+    symbol: "↑",
     label: "직진",
+    instruction: "현재 차선을 유지하고 직진",
   },
   right: {
-    icon: "turn-right",
+    symbol: "→",
     label: "우회전",
+    instruction: "다음 교차로에서 우회전",
+  },
+  uturn: {
+    symbol: "↶",
+    label: "유턴",
+    instruction: "안전 확인 후 유턴",
   },
 };
+
+function getProviderLink(provider: NavigationProvider, point: RoutePoint) {
+  const destinationName = encodeURIComponent("AI Omni Drive 목적지");
+
+  if (provider === "kakaomap") {
+    return {
+      primary: `kakaomap://route?ep=${point.latitude},${point.longitude}&by=car`,
+      fallback: `https://m.map.kakao.com/scheme/route?ep=${point.latitude},${point.longitude}&by=car`,
+    };
+  }
+
+  if (provider === "inavi") {
+    return {
+      primary: `inavi://route?name=${destinationName}&lat=${point.latitude}&lng=${point.longitude}`,
+      fallback: `https://www.inavi.com/`,
+    };
+  }
+
+  return {
+    primary: `tmap://route?goalx=${point.longitude}&goaly=${point.latitude}&goalname=${destinationName}`,
+    fallback: `https://apis.openapi.sk.com/tmap/app/routes?appKey=&name=${destinationName}&lon=${point.longitude}&lat=${point.latitude}`,
+  };
+}
 
 export default function HomeScreen() {
   const [signalIndex, setSignalIndex] = useState(0);
   const [directionIndex, setDirectionIndex] = useState(0);
+  const [selectedNavigationProvider, setSelectedNavigationProvider] = useState<NavigationProvider>(
+    DEFAULT_SETTINGS.selectedNavigationProvider,
+  );
+  const [arrowSize, setArrowSize] = useState<ArrowSize>(DEFAULT_SETTINGS.arrowSize);
+  const [liveRouteSyncEnabled, setLiveRouteSyncEnabled] = useState(
+    DEFAULT_SETTINGS.liveRouteSyncEnabled,
+  );
+  const [quickDestinationCount, setQuickDestinationCount] = useState(
+    DEFAULT_SETTINGS.quickDestinations.length,
+  );
+  const [locationStatus, setLocationStatus] = useState("GPS 대기");
+  const [locationCoordsText, setLocationCoordsText] = useState("위치 미확인");
+  const [distanceValue, setDistanceValue] = useState(GPS_ROUTE_POINTS[0].signalDistance);
+  const [speedValue, setSpeedValue] = useState(GPS_ROUTE_POINTS[0].speed);
+  const routeIndexRef = useRef(0);
+  const locationSubscriptionRef = useRef<Location.LocationSubscription | null>(null);
+
+  const loadSettings = useCallback(async () => {
+    try {
+      const savedValue = await AsyncStorage.getItem(SETTINGS_STORAGE_KEY);
+
+      if (!savedValue) {
+        return;
+      }
+
+      const parsed = JSON.parse(savedValue) as Partial<AppSettings>;
+      setSelectedNavigationProvider(
+        parsed.selectedNavigationProvider ?? DEFAULT_SETTINGS.selectedNavigationProvider,
+      );
+      setArrowSize(parsed.arrowSize ?? DEFAULT_SETTINGS.arrowSize);
+      setLiveRouteSyncEnabled(parsed.liveRouteSyncEnabled ?? DEFAULT_SETTINGS.liveRouteSyncEnabled);
+      setQuickDestinationCount((parsed.quickDestinations ?? DEFAULT_SETTINGS.quickDestinations).length);
+    } catch (error) {
+      console.error("Failed to load home settings", error);
+    }
+  }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      loadSettings();
+    }, [loadSettings]),
+  );
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -79,28 +218,93 @@ export default function HomeScreen() {
   }, []);
 
   useEffect(() => {
+    if (!liveRouteSyncEnabled) {
+      return;
+    }
+
     const interval = setInterval(() => {
       setDirectionIndex((prev) => (prev + 1) % DIRECTION_SEQUENCE.length);
     }, 2200);
 
     return () => clearInterval(interval);
-  }, []);
+  }, [liveRouteSyncEnabled]);
+
+  useEffect(() => {
+    const startGpsSync = async () => {
+      if (!liveRouteSyncEnabled) {
+        setLocationStatus("수동 방향 전환 모드");
+        return;
+      }
+
+      try {
+        const servicesEnabled = await Location.hasServicesEnabledAsync();
+        if (!servicesEnabled) {
+          setLocationStatus("GPS 비활성화");
+          return;
+        }
+
+        const { status } = await Location.requestForegroundPermissionsAsync();
+        if (status !== "granted") {
+          setLocationStatus("GPS 권한 필요");
+          return;
+        }
+
+        setLocationStatus("GPS 실시간 추적 중");
+
+        locationSubscriptionRef.current?.remove();
+        locationSubscriptionRef.current = await Location.watchPositionAsync(
+          {
+            accuracy: Location.Accuracy.Balanced,
+            timeInterval: 5000,
+            distanceInterval: 5,
+          },
+          (location) => {
+            const routePoint = GPS_ROUTE_POINTS[routeIndexRef.current % GPS_ROUTE_POINTS.length];
+            routeIndexRef.current += 1;
+
+            setLocationCoordsText(
+              `${location.coords.latitude.toFixed(4)}, ${location.coords.longitude.toFixed(4)}`,
+            );
+            setDistanceValue(routePoint.signalDistance);
+            const speedKmh = typeof location.coords.speed === "number" && location.coords.speed > 0
+              ? `${Math.round(location.coords.speed * 3.6)} km/h`
+              : routePoint.speed;
+            setSpeedValue(speedKmh);
+            setDirectionIndex(DIRECTION_SEQUENCE.indexOf(routePoint.direction));
+          },
+        );
+      } catch (error) {
+        console.error("Failed to start GPS sync", error);
+        setLocationStatus("GPS 연결 실패");
+      }
+    };
+
+    startGpsSync();
+
+    return () => {
+      locationSubscriptionRef.current?.remove();
+      locationSubscriptionRef.current = null;
+    };
+  }, [liveRouteSyncEnabled]);
 
   const signalState = SIGNAL_SEQUENCE[signalIndex];
   const currentSignal = useMemo(() => SIGNAL_META[signalState], [signalState]);
-  const currentDirection = useMemo(
-    () => DIRECTION_META[DIRECTION_SEQUENCE[directionIndex]],
-    [directionIndex],
-  );
+  const currentDirectionKey = DIRECTION_SEQUENCE[directionIndex] ?? "straight";
+  const currentDirection = useMemo(() => DIRECTION_META[currentDirectionKey], [currentDirectionKey]);
+  const arrowFontSize = ARROW_FONT_SIZE[arrowSize];
+  const routePoint = GPS_ROUTE_POINTS[routeIndexRef.current % GPS_ROUTE_POINTS.length];
+
   const handleAdvanceDirection = () => {
     setDirectionIndex((prev) => (prev + 1) % DIRECTION_SEQUENCE.length);
   };
+
 
   return (
     <ScreenContainer style={styles.screenContent}>
       <View style={styles.root}>
         <View style={styles.headerZone}>
           <Text style={styles.headerText}>AI Omni Code Sync</Text>
+          <Text style={styles.headerSubText}>{PROVIDER_LABEL[selectedNavigationProvider]}</Text>
         </View>
 
         <View style={styles.mainColumn}>
@@ -115,14 +319,14 @@ export default function HomeScreen() {
             <View style={styles.infoCard}>
               <View style={styles.infoBlock}>
                 <Text style={styles.infoLabel}>남은 거리</Text>
-                <Text style={styles.infoValue}>{currentSignal.distance}</Text>
+                <Text style={styles.infoValue}>{distanceValue}</Text>
               </View>
 
               <View style={styles.infoDivider} />
 
               <View style={styles.infoBlock}>
                 <Text style={styles.infoLabel}>현재 속도</Text>
-                <Text style={styles.infoValue}>{currentSignal.speed}</Text>
+                <Text style={styles.infoValue}>{speedValue}</Text>
               </View>
             </View>
           </View>
@@ -134,8 +338,17 @@ export default function HomeScreen() {
               onPress={handleAdvanceDirection}
               style={({ pressed }) => [styles.naviCard, pressed && styles.controlButtonPressed]}
             >
-              <MaterialIcons name={currentDirection.icon} size={74} color="#ffffff" />
+              <View style={styles.naviHeaderRow}>
+                <MaterialIcons name="near-me" size={28} color="#ffffff" />
+                <Text style={styles.naviProviderText}>{PROVIDER_LABEL[selectedNavigationProvider]}</Text>
+              </View>
+              <Text style={[styles.naviArrowText, { fontSize: arrowFontSize, lineHeight: arrowFontSize + 8 }]}>
+                {currentDirection.symbol}
+              </Text>
               <Text style={styles.naviText}>{currentDirection.label}</Text>
+              <Text style={styles.naviInstruction}>{currentDirection.instruction}</Text>
+              <Text style={styles.naviMetaText}>{locationStatus}</Text>
+              <Text style={styles.naviMetaText}>{locationCoordsText}</Text>
             </Pressable>
           </View>
 
@@ -169,6 +382,12 @@ export default function HomeScreen() {
               </Pressable>
             </View>
           </View>
+
+          <View style={styles.footerStatusRow}>
+            <Text style={styles.footerStatusText}>
+              빠른 목적지 {quickDestinationCount}개 · 탭하면 방향 수동 전환
+            </Text>
+          </View>
         </View>
       </View>
     </ScreenContainer>
@@ -189,12 +408,18 @@ const styles = StyleSheet.create({
     paddingBottom: 10,
     alignItems: "center",
     justifyContent: "center",
+    gap: 4,
   },
   headerText: {
     fontSize: 24,
     fontWeight: "bold",
     color: "#11181c",
     letterSpacing: -0.3,
+  },
+  headerSubText: {
+    fontSize: 18,
+    fontWeight: "bold",
+    color: "#4b5563",
   },
   mainColumn: {
     flex: 1,
@@ -280,13 +505,44 @@ const styles = StyleSheet.create({
     backgroundColor: "#1f2937",
     alignItems: "center",
     justifyContent: "center",
-    paddingVertical: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
   },
-  naviText: {
-    marginTop: 10,
-    fontSize: 24,
+  naviHeaderRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  naviProviderText: {
+    fontSize: 18,
     fontWeight: "bold",
     color: "#ffffff",
+  },
+  naviArrowText: {
+    marginTop: 4,
+    fontWeight: "bold",
+    color: "#ffffff",
+    textAlign: "center",
+  },
+  naviText: {
+    marginTop: 2,
+    fontSize: 30,
+    fontWeight: "bold",
+    color: "#ffffff",
+  },
+  naviInstruction: {
+    marginTop: 4,
+    fontSize: 22,
+    fontWeight: "bold",
+    color: "#d1d5db",
+    textAlign: "center",
+  },
+  naviMetaText: {
+    marginTop: 4,
+    fontSize: 16,
+    fontWeight: "bold",
+    color: "#9ca3af",
+    textAlign: "center",
   },
   bottomBarZone: {
     flex: 0.5,
@@ -327,5 +583,15 @@ const styles = StyleSheet.create({
     color: "#11181c",
     textAlign: "center",
     flexShrink: 0,
+  },
+  footerStatusRow: {
+    paddingTop: 6,
+    alignItems: "center",
+  },
+  footerStatusText: {
+    fontSize: 16,
+    fontWeight: "bold",
+    color: "#4b5563",
+    textAlign: "center",
   },
 });
