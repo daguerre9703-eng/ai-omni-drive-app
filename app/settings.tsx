@@ -14,12 +14,21 @@ import {
 } from "react-native";
 
 import { ScreenContainer } from "@/components/screen-container";
+import {
+  DEFAULT_VOICE_ALERT_SETTINGS,
+  VOICE_LENGTH_OPTIONS,
+  VOICE_STYLE_OPTIONS,
+  type VoiceAlertLength,
+  type VoiceAlertStyle,
+} from "@/lib/voice-alerts";
 
 type NavigationProvider = "kakaomap" | "inavi" | "tmap";
 type ArrowSize = "large" | "xlarge" | "huge";
 
 type AppSettings = {
   voiceGuideEnabled: boolean;
+  voiceAlertLength: VoiceAlertLength;
+  voiceAlertStyle: VoiceAlertStyle;
   liveRouteSyncEnabled: boolean;
   selectedNavigationProvider: NavigationProvider;
   arrowSize: ArrowSize;
@@ -29,7 +38,9 @@ type AppSettings = {
 const SETTINGS_STORAGE_KEY = "ai-omni-drive:settings";
 
 const DEFAULT_SETTINGS: AppSettings = {
-  voiceGuideEnabled: true,
+  voiceGuideEnabled: DEFAULT_VOICE_ALERT_SETTINGS.enabled,
+  voiceAlertLength: DEFAULT_VOICE_ALERT_SETTINGS.length,
+  voiceAlertStyle: DEFAULT_VOICE_ALERT_SETTINGS.style,
   liveRouteSyncEnabled: true,
   selectedNavigationProvider: "tmap",
   arrowSize: "huge",
@@ -86,6 +97,12 @@ const ARROW_SIZE_OPTIONS: Array<{
 
 export default function SettingsScreen() {
   const [voiceGuideEnabled, setVoiceGuideEnabled] = useState(DEFAULT_SETTINGS.voiceGuideEnabled);
+  const [voiceAlertLength, setVoiceAlertLength] = useState<VoiceAlertLength>(
+    DEFAULT_SETTINGS.voiceAlertLength,
+  );
+  const [voiceAlertStyle, setVoiceAlertStyle] = useState<VoiceAlertStyle>(
+    DEFAULT_SETTINGS.voiceAlertStyle,
+  );
   const [liveRouteSyncEnabled, setLiveRouteSyncEnabled] = useState(DEFAULT_SETTINGS.liveRouteSyncEnabled);
   const [selectedNavigationProvider, setSelectedNavigationProvider] = useState<NavigationProvider>(
     DEFAULT_SETTINGS.selectedNavigationProvider,
@@ -114,6 +131,8 @@ export default function SettingsScreen() {
         }
 
         setVoiceGuideEnabled(parsed.voiceGuideEnabled ?? DEFAULT_SETTINGS.voiceGuideEnabled);
+        setVoiceAlertLength(parsed.voiceAlertLength ?? DEFAULT_SETTINGS.voiceAlertLength);
+        setVoiceAlertStyle(parsed.voiceAlertStyle ?? DEFAULT_SETTINGS.voiceAlertStyle);
         setLiveRouteSyncEnabled(parsed.liveRouteSyncEnabled ?? DEFAULT_SETTINGS.liveRouteSyncEnabled);
         setSelectedNavigationProvider(
           parsed.selectedNavigationProvider ?? DEFAULT_SETTINGS.selectedNavigationProvider,
@@ -140,6 +159,14 @@ export default function SettingsScreen() {
     return PROVIDER_OPTIONS.find((option) => option.key === selectedNavigationProvider)?.title ?? "티맵";
   }, [selectedNavigationProvider]);
 
+  const selectedLengthLabel = useMemo(() => {
+    return VOICE_LENGTH_OPTIONS.find((option) => option.key === voiceAlertLength)?.title ?? "상세 안내";
+  }, [voiceAlertLength]);
+
+  const selectedStyleLabel = useMemo(() => {
+    return VOICE_STYLE_OPTIONS.find((option) => option.key === voiceAlertStyle)?.title ?? "기본";
+  }, [voiceAlertStyle]);
+
   const handleAddDestination = () => {
     const trimmed = pendingDestination.trim();
 
@@ -165,6 +192,8 @@ export default function SettingsScreen() {
   const handleSave = async () => {
     const nextSettings: AppSettings = {
       voiceGuideEnabled,
+      voiceAlertLength,
+      voiceAlertStyle,
       liveRouteSyncEnabled,
       selectedNavigationProvider,
       arrowSize,
@@ -176,7 +205,7 @@ export default function SettingsScreen() {
       await AsyncStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(nextSettings));
       Alert.alert(
         "저장 완료",
-        `${currentProviderLabel} 연동 설정과 화살표 크기 설정을 저장했습니다.`,
+        `${currentProviderLabel} 연동 설정과 ${selectedLengthLabel} · ${selectedStyleLabel} 음성 스타일을 저장했습니다.`,
         [
           {
             text: "확인",
@@ -219,7 +248,7 @@ export default function SettingsScreen() {
             <Text style={styles.summaryTitle}>현재 연동 상태</Text>
             <Text style={styles.summaryValue}>{currentProviderLabel}</Text>
             <Text style={styles.summaryDescription}>
-              사용자가 선택한 내비게이션 앱 기준으로 경로 연동과 방향 안내를 맞춥니다.
+              음성 길이 {selectedLengthLabel} · 음성 스타일 {selectedStyleLabel} 기준으로 안내 문구를 조합합니다.
             </Text>
           </View>
 
@@ -229,8 +258,84 @@ export default function SettingsScreen() {
               <Switch value={voiceGuideEnabled} onValueChange={setVoiceGuideEnabled} />
             </View>
             <Text style={styles.sectionDescription}>
-              신호 상태와 방향 안내를 음성으로 읽어 줍니다.
+              음성 안내를 끄면 HUD 문구만 갱신하고 소리는 출력하지 않습니다.
             </Text>
+          </View>
+
+          <View style={styles.sectionCard}>
+            <Text style={styles.sectionTitle}>안내 음성 길이</Text>
+            <Text style={styles.sectionDescription}>
+              상세 안내 또는 간략 안내 중 하나를 골라 문장 길이를 직접 조절할 수 있습니다.
+            </Text>
+
+            <View style={styles.optionList}>
+              {VOICE_LENGTH_OPTIONS.map((option) => {
+                const selected = option.key === voiceAlertLength;
+
+                return (
+                  <Pressable
+                    key={option.key}
+                    accessibilityRole="button"
+                    onPress={() => setVoiceAlertLength(option.key)}
+                    style={({ pressed }) => [
+                      styles.arrowOption,
+                      selected && styles.arrowOptionSelected,
+                      pressed && styles.buttonPressed,
+                    ]}
+                  >
+                    <Text style={[styles.arrowOptionTitle, selected && styles.arrowOptionTitleSelected]}>
+                      {option.title}
+                    </Text>
+                    <Text
+                      style={[
+                        styles.arrowOptionDescription,
+                        selected && styles.arrowOptionDescriptionSelected,
+                      ]}
+                    >
+                      {option.description}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+          </View>
+
+          <View style={styles.sectionCard}>
+            <Text style={styles.sectionTitle}>안내 음성 스타일</Text>
+            <Text style={styles.sectionDescription}>
+              같은 문구라도 말하는 속도와 톤을 다르게 적용해 원하는 안내 느낌을 선택할 수 있습니다.
+            </Text>
+
+            <View style={styles.optionList}>
+              {VOICE_STYLE_OPTIONS.map((option) => {
+                const selected = option.key === voiceAlertStyle;
+
+                return (
+                  <Pressable
+                    key={option.key}
+                    accessibilityRole="button"
+                    onPress={() => setVoiceAlertStyle(option.key)}
+                    style={({ pressed }) => [
+                      styles.arrowOption,
+                      selected && styles.arrowOptionSelected,
+                      pressed && styles.buttonPressed,
+                    ]}
+                  >
+                    <Text style={[styles.arrowOptionTitle, selected && styles.arrowOptionTitleSelected]}>
+                      {option.title}
+                    </Text>
+                    <Text
+                      style={[
+                        styles.arrowOptionDescription,
+                        selected && styles.arrowOptionDescriptionSelected,
+                      ]}
+                    >
+                      {option.description}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
           </View>
 
           <View style={styles.sectionCard}>

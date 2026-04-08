@@ -59,6 +59,17 @@ describe("home hud layout regression", () => {
     expect(homeSource).toContain('fontSize: 52');
   });
 
+  it("keeps compact spacing rules that prevent text overlap on narrow screens", () => {
+    expect(homeSource).toContain('const displayedArrowFontSize = Math.min(arrowFontSize, 120);');
+    expect(homeSource).toContain('columnGap: 8');
+    expect(homeSource).toContain('fontSize: 20');
+    expect(homeSource).toContain('fontSize: 28');
+    expect(homeSource).toContain('naviMetaGroup');
+    expect(homeSource).toContain('numberOfLines={1} style={styles.naviMetaText}');
+    expect(homeSource).toContain('footerSubStatusText');
+    expect(homeSource).toContain('미리듣기: {voicePreviewText}');
+  });
+
   it("builds the bottom bar with balanced spacing and working routes", () => {
     expect(homeSource).toContain('justifyContent: "space-around"');
     expect(homeSource).toContain('router.push("/camera")');

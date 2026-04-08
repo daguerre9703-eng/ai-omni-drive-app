@@ -1,13 +1,19 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import MaterialIcons from "@expo/vector-icons/MaterialIcons";
-import * as Linking from "expo-linking";
 import * as Location from "expo-location";
 import { useFocusEffect } from "@react-navigation/native";
 import { router } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Platform, Pressable, StyleSheet, Text, View } from "react-native";
+import { Pressable, StyleSheet, Text, View } from "react-native";
 
 import { ScreenContainer } from "@/components/screen-container";
+import {
+  DEFAULT_VOICE_ALERT_SETTINGS,
+  buildVoiceAlertText,
+  speakVoiceAlert,
+  type VoiceAlertLength,
+  type VoiceAlertStyle,
+} from "@/lib/voice-alerts";
 
 type SignalState = "red" | "yellow" | "green";
 type DirectionState = "left" | "straight" | "right" | "uturn";
@@ -16,6 +22,8 @@ type ArrowSize = "large" | "xlarge" | "huge";
 
 type AppSettings = {
   voiceGuideEnabled: boolean;
+  voiceAlertLength: VoiceAlertLength;
+  voiceAlertStyle: VoiceAlertStyle;
   liveRouteSyncEnabled: boolean;
   selectedNavigationProvider: NavigationProvider;
   arrowSize: ArrowSize;
@@ -25,8 +33,9 @@ type AppSettings = {
 type RoutePoint = {
   latitude: number;
   longitude: number;
-  signalDistance: string;
-  speed: string;
+  signalDistanceMeters: number;
+  signalDistanceLabel: string;
+  fallbackSpeedLabel: string;
   direction: DirectionState;
 };
 
@@ -35,7 +44,9 @@ const SIGNAL_SEQUENCE: SignalState[] = ["red", "yellow", "green"];
 const DIRECTION_SEQUENCE: DirectionState[] = ["left", "straight", "right", "uturn"];
 
 const DEFAULT_SETTINGS: AppSettings = {
-  voiceGuideEnabled: true,
+  voiceGuideEnabled: DEFAULT_VOICE_ALERT_SETTINGS.enabled,
+  voiceAlertLength: DEFAULT_VOICE_ALERT_SETTINGS.length,
+  voiceAlertStyle: DEFAULT_VOICE_ALERT_SETTINGS.style,
   liveRouteSyncEnabled: true,
   selectedNavigationProvider: "tmap",
   arrowSize: "huge",
@@ -58,29 +69,33 @@ const GPS_ROUTE_POINTS: RoutePoint[] = [
   {
     latitude: 37.5665,
     longitude: 126.978,
-    signalDistance: "128m",
-    speed: "18 km/h",
+    signalDistanceMeters: 128,
+    signalDistanceLabel: "128m",
+    fallbackSpeedLabel: "18 km/h",
     direction: "left",
   },
   {
     latitude: 37.5669,
     longitude: 126.9787,
-    signalDistance: "102m",
-    speed: "24 km/h",
+    signalDistanceMeters: 102,
+    signalDistanceLabel: "102m",
+    fallbackSpeedLabel: "24 km/h",
     direction: "straight",
   },
   {
     latitude: 37.5672,
     longitude: 126.9796,
-    signalDistance: "76m",
-    speed: "31 km/h",
+    signalDistanceMeters: 76,
+    signalDistanceLabel: "76m",
+    fallbackSpeedLabel: "31 km/h",
     direction: "right",
   },
   {
     latitude: 37.567,
     longitude: 126.9803,
-    signalDistance: "40m",
-    speed: "12 km/h",
+    signalDistanceMeters: 40,
+    signalDistanceLabel: "40m",
+    fallbackSpeedLabel: "12 km/h",
     direction: "uturn",
   },
 ];
@@ -140,29 +155,6 @@ const DIRECTION_META: Record<
   },
 };
 
-function getProviderLink(provider: NavigationProvider, point: RoutePoint) {
-  const destinationName = encodeURIComponent("AI Omni Drive 목적지");
-
-  if (provider === "kakaomap") {
-    return {
-      primary: `kakaomap://route?ep=${point.latitude},${point.longitude}&by=car`,
-      fallback: `https://m.map.kakao.com/scheme/route?ep=${point.latitude},${point.longitude}&by=car`,
-    };
-  }
-
-  if (provider === "inavi") {
-    return {
-      primary: `inavi://route?name=${destinationName}&lat=${point.latitude}&lng=${point.longitude}`,
-      fallback: `https://www.inavi.com/`,
-    };
-  }
-
-  return {
-    primary: `tmap://route?goalx=${point.longitude}&goaly=${point.latitude}&goalname=${destinationName}`,
-    fallback: `https://apis.openapi.sk.com/tmap/app/routes?appKey=&name=${destinationName}&lon=${point.longitude}&lat=${point.latitude}`,
-  };
-}
-
 export default function HomeScreen() {
   const [signalIndex, setSignalIndex] = useState(0);
   const [directionIndex, setDirectionIndex] = useState(0);
@@ -170,6 +162,13 @@ export default function HomeScreen() {
     DEFAULT_SETTINGS.selectedNavigationProvider,
   );
   const [arrowSize, setArrowSize] = useState<ArrowSize>(DEFAULT_SETTINGS.arrowSize);
+  const [voiceGuideEnabled, setVoiceGuideEnabled] = useState(DEFAULT_SETTINGS.voiceGuideEnabled);
+  const [voiceAlertLength, setVoiceAlertLength] = useState<VoiceAlertLength>(
+    DEFAULT_SETTINGS.voiceAlertLength,
+  );
+  const [voiceAlertStyle, setVoiceAlertStyle] = useState<VoiceAlertStyle>(
+    DEFAULT_SETTINGS.voiceAlertStyle,
+  );
   const [liveRouteSyncEnabled, setLiveRouteSyncEnabled] = useState(
     DEFAULT_SETTINGS.liveRouteSyncEnabled,
   );
@@ -178,10 +177,12 @@ export default function HomeScreen() {
   );
   const [locationStatus, setLocationStatus] = useState("GPS 대기");
   const [locationCoordsText, setLocationCoordsText] = useState("위치 미확인");
-  const [distanceValue, setDistanceValue] = useState(GPS_ROUTE_POINTS[0].signalDistance);
-  const [speedValue, setSpeedValue] = useState(GPS_ROUTE_POINTS[0].speed);
+  const [distanceValue, setDistanceValue] = useState(GPS_ROUTE_POINTS[0].signalDistanceLabel);
+  const [distanceMeters, setDistanceMeters] = useState(GPS_ROUTE_POINTS[0].signalDistanceMeters);
+  const [speedValue, setSpeedValue] = useState(GPS_ROUTE_POINTS[0].fallbackSpeedLabel);
   const routeIndexRef = useRef(0);
   const locationSubscriptionRef = useRef<Location.LocationSubscription | null>(null);
+  const lastVoiceAlertKeyRef = useRef<string | null>(null);
 
   const loadSettings = useCallback(async () => {
     try {
@@ -196,6 +197,9 @@ export default function HomeScreen() {
         parsed.selectedNavigationProvider ?? DEFAULT_SETTINGS.selectedNavigationProvider,
       );
       setArrowSize(parsed.arrowSize ?? DEFAULT_SETTINGS.arrowSize);
+      setVoiceGuideEnabled(parsed.voiceGuideEnabled ?? DEFAULT_SETTINGS.voiceGuideEnabled);
+      setVoiceAlertLength(parsed.voiceAlertLength ?? DEFAULT_SETTINGS.voiceAlertLength);
+      setVoiceAlertStyle(parsed.voiceAlertStyle ?? DEFAULT_SETTINGS.voiceAlertStyle);
       setLiveRouteSyncEnabled(parsed.liveRouteSyncEnabled ?? DEFAULT_SETTINGS.liveRouteSyncEnabled);
       setQuickDestinationCount((parsed.quickDestinations ?? DEFAULT_SETTINGS.quickDestinations).length);
     } catch (error) {
@@ -265,10 +269,11 @@ export default function HomeScreen() {
             setLocationCoordsText(
               `${location.coords.latitude.toFixed(4)}, ${location.coords.longitude.toFixed(4)}`,
             );
-            setDistanceValue(routePoint.signalDistance);
+            setDistanceMeters(routePoint.signalDistanceMeters);
+            setDistanceValue(routePoint.signalDistanceLabel);
             const speedKmh = typeof location.coords.speed === "number" && location.coords.speed > 0
               ? `${Math.round(location.coords.speed * 3.6)} km/h`
-              : routePoint.speed;
+              : routePoint.fallbackSpeedLabel;
             setSpeedValue(speedKmh);
             setDirectionIndex(DIRECTION_SEQUENCE.indexOf(routePoint.direction));
           },
@@ -292,12 +297,48 @@ export default function HomeScreen() {
   const currentDirectionKey = DIRECTION_SEQUENCE[directionIndex] ?? "straight";
   const currentDirection = useMemo(() => DIRECTION_META[currentDirectionKey], [currentDirectionKey]);
   const arrowFontSize = ARROW_FONT_SIZE[arrowSize];
-  const routePoint = GPS_ROUTE_POINTS[routeIndexRef.current % GPS_ROUTE_POINTS.length];
+  const displayedArrowFontSize = Math.min(arrowFontSize, 120);
+  const voiceLengthLabel = voiceAlertLength === "detailed" ? "상세" : "간략";
+  const voiceStyleLabel = voiceAlertStyle === "standard" ? "기본" : voiceAlertStyle === "calm" ? "차분" : "집중";
+  const voiceSettings = useMemo(
+    () => ({
+      enabled: voiceGuideEnabled,
+      length: voiceAlertLength,
+      style: voiceAlertStyle,
+    }),
+    [voiceGuideEnabled, voiceAlertLength, voiceAlertStyle],
+  );
+  const voicePreviewText = useMemo(() => {
+    return buildVoiceAlertText("red_signal_ahead", voiceSettings, { distanceMeters });
+  }, [distanceMeters, voiceSettings]);
+
+  useEffect(() => {
+    const announceSignal = async () => {
+      const event = signalState === "red"
+        ? "red_signal_ahead"
+        : signalState === "green"
+          ? "green_signal_changed"
+          : null;
+
+      if (!event) {
+        return;
+      }
+
+      const voiceAlertKey = `${event}:${voiceAlertLength}:${voiceAlertStyle}:${distanceMeters}:${voiceGuideEnabled}`;
+      if (lastVoiceAlertKeyRef.current === voiceAlertKey) {
+        return;
+      }
+
+      lastVoiceAlertKeyRef.current = voiceAlertKey;
+      await speakVoiceAlert(event, voiceSettings, { distanceMeters });
+    };
+
+    void announceSignal();
+  }, [distanceMeters, signalState, voiceAlertLength, voiceAlertStyle, voiceGuideEnabled, voiceSettings]);
 
   const handleAdvanceDirection = () => {
     setDirectionIndex((prev) => (prev + 1) % DIRECTION_SEQUENCE.length);
   };
-
 
   return (
     <ScreenContainer style={styles.screenContent}>
@@ -342,13 +383,20 @@ export default function HomeScreen() {
                 <MaterialIcons name="near-me" size={28} color="#ffffff" />
                 <Text style={styles.naviProviderText}>{PROVIDER_LABEL[selectedNavigationProvider]}</Text>
               </View>
-              <Text style={[styles.naviArrowText, { fontSize: arrowFontSize, lineHeight: arrowFontSize + 8 }]}>
+              <Text
+                style={[
+                  styles.naviArrowText,
+                  { fontSize: displayedArrowFontSize, lineHeight: displayedArrowFontSize + 4 },
+                ]}
+              >
                 {currentDirection.symbol}
               </Text>
-              <Text style={styles.naviText}>{currentDirection.label}</Text>
-              <Text style={styles.naviInstruction}>{currentDirection.instruction}</Text>
-              <Text style={styles.naviMetaText}>{locationStatus}</Text>
-              <Text style={styles.naviMetaText}>{locationCoordsText}</Text>
+              <Text numberOfLines={1} style={styles.naviText}>{currentDirection.label}</Text>
+              <Text numberOfLines={1} style={styles.naviInstruction}>{currentDirection.instruction}</Text>
+              <View style={styles.naviMetaGroup}>
+                <Text numberOfLines={1} style={styles.naviMetaText}>{locationStatus}</Text>
+                <Text numberOfLines={1} style={styles.naviMetaText}>{locationCoordsText}</Text>
+              </View>
             </Pressable>
           </View>
 
@@ -385,7 +433,10 @@ export default function HomeScreen() {
 
           <View style={styles.footerStatusRow}>
             <Text style={styles.footerStatusText}>
-              빠른 목적지 {quickDestinationCount}개 · 탭하면 방향 수동 전환
+              목적지 {quickDestinationCount}개 · 음성 {voiceLengthLabel} · 스타일 {voiceStyleLabel}
+            </Text>
+            <Text numberOfLines={1} style={styles.footerSubStatusText}>
+              미리듣기: {voicePreviewText}
             </Text>
           </View>
         </View>
@@ -468,7 +519,8 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingHorizontal: 18,
+    paddingHorizontal: 12,
+    columnGap: 8,
   },
   infoBlock: {
     flex: 1,
@@ -482,17 +534,19 @@ const styles = StyleSheet.create({
     marginVertical: 18,
   },
   infoLabel: {
-    fontSize: 24,
+    fontSize: 20,
     fontWeight: "bold",
     color: "#4b5563",
     textAlign: "center",
+    lineHeight: 24,
   },
   infoValue: {
-    marginTop: 12,
-    fontSize: 34,
+    marginTop: 10,
+    fontSize: 28,
     fontWeight: "bold",
     color: "#11181c",
     textAlign: "center",
+    lineHeight: 32,
   },
   naviZone: {
     flex: 1,
@@ -506,7 +560,9 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     paddingHorizontal: 14,
-    paddingVertical: 10,
+    paddingVertical: 12,
+    overflow: "hidden",
+    rowGap: 2,
   },
   naviHeaderRow: {
     flexDirection: "row",
@@ -514,32 +570,38 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   naviProviderText: {
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: "bold",
     color: "#ffffff",
   },
   naviArrowText: {
-    marginTop: 4,
+    marginTop: 2,
     fontWeight: "bold",
     color: "#ffffff",
     textAlign: "center",
   },
   naviText: {
-    marginTop: 2,
-    fontSize: 30,
+    marginTop: 0,
+    fontSize: 24,
     fontWeight: "bold",
     color: "#ffffff",
   },
   naviInstruction: {
-    marginTop: 4,
-    fontSize: 22,
+    marginTop: 2,
+    fontSize: 17,
+    lineHeight: 21,
     fontWeight: "bold",
     color: "#d1d5db",
     textAlign: "center",
   },
-  naviMetaText: {
+  naviMetaGroup: {
     marginTop: 4,
-    fontSize: 16,
+    width: "100%",
+    gap: 2,
+  },
+  naviMetaText: {
+    fontSize: 13,
+    lineHeight: 16,
     fontWeight: "bold",
     color: "#9ca3af",
     textAlign: "center",
@@ -557,8 +619,8 @@ const styles = StyleSheet.create({
     backgroundColor: "#f3f4f6",
     borderWidth: 1,
     borderColor: "#e5e7eb",
-    paddingHorizontal: 8,
-    columnGap: 6,
+    paddingHorizontal: 12,
+    columnGap: 8,
   },
   controlButton: {
     width: "31%",
@@ -577,21 +639,32 @@ const styles = StyleSheet.create({
     transform: [{ scale: 0.98 }],
   },
   controlText: {
-    fontSize: 24,
-    lineHeight: 28,
+    fontSize: 20,
+    lineHeight: 24,
     fontWeight: "bold",
     color: "#11181c",
     textAlign: "center",
-    flexShrink: 0,
+    flexShrink: 1,
   },
   footerStatusRow: {
     paddingTop: 6,
+    paddingHorizontal: 10,
     alignItems: "center",
+    gap: 2,
   },
   footerStatusText: {
-    fontSize: 16,
+    fontSize: 14,
+    lineHeight: 18,
     fontWeight: "bold",
     color: "#4b5563",
     textAlign: "center",
+  },
+  footerSubStatusText: {
+    fontSize: 12,
+    lineHeight: 16,
+    fontWeight: "600",
+    color: "#6b7280",
+    textAlign: "center",
+    width: "100%",
   },
 });
