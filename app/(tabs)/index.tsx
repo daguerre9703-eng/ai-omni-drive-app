@@ -10,7 +10,6 @@ import { ScreenContainer } from "@/components/screen-container";
 import {
   DEFAULT_VOICE_ALERT_SETTINGS,
   buildVoiceAlertText,
-  speakVoiceAlert,
   type VoiceAlertLength,
   type VoiceAlertStyle,
 } from "@/lib/voice-alerts";
@@ -182,7 +181,6 @@ export default function HomeScreen() {
   const [speedValue, setSpeedValue] = useState(GPS_ROUTE_POINTS[0].fallbackSpeedLabel);
   const routeIndexRef = useRef(0);
   const locationSubscriptionRef = useRef<Location.LocationSubscription | null>(null);
-  const lastVoiceAlertKeyRef = useRef<string | null>(null);
 
   const loadSettings = useCallback(async () => {
     try {
@@ -312,30 +310,6 @@ export default function HomeScreen() {
     return buildVoiceAlertText("red_signal_ahead", voiceSettings, { distanceMeters });
   }, [distanceMeters, voiceSettings]);
 
-  useEffect(() => {
-    const announceSignal = async () => {
-      const event = signalState === "red"
-        ? "red_signal_ahead"
-        : signalState === "green"
-          ? "green_signal_changed"
-          : null;
-
-      if (!event) {
-        return;
-      }
-
-      const voiceAlertKey = `${event}:${voiceAlertLength}:${voiceAlertStyle}:${distanceMeters}:${voiceGuideEnabled}`;
-      if (lastVoiceAlertKeyRef.current === voiceAlertKey) {
-        return;
-      }
-
-      lastVoiceAlertKeyRef.current = voiceAlertKey;
-      await speakVoiceAlert(event, voiceSettings, { distanceMeters });
-    };
-
-    void announceSignal();
-  }, [distanceMeters, signalState, voiceAlertLength, voiceAlertStyle, voiceGuideEnabled, voiceSettings]);
-
   const handleAdvanceDirection = () => {
     setDirectionIndex((prev) => (prev + 1) % DIRECTION_SEQUENCE.length);
   };
@@ -344,30 +318,35 @@ export default function HomeScreen() {
     <ScreenContainer style={styles.screenContent}>
       <View style={styles.root}>
         <View style={styles.headerZone}>
-          <Text style={styles.headerText}>AI Omni Code Sync</Text>
+          <Text style={styles.headerText}>AI Omni-Drive</Text>
           <Text style={styles.headerSubText}>{PROVIDER_LABEL[selectedNavigationProvider]}</Text>
         </View>
 
         <View style={styles.mainColumn}>
           <View style={styles.visualZone}>
-            <View style={[styles.signalCard, { backgroundColor: currentSignal.backgroundColor }]}>
-              <Text style={styles.signalCardText}>{currentSignal.title}</Text>
-              <Text style={styles.signalCardSubText}>{currentSignal.label}</Text>
+            <View style={styles.cardShell}>
+              <View style={[styles.signalCard, { backgroundColor: currentSignal.backgroundColor }]}>
+                <View style={styles.signalHighlight} />
+                <Text style={styles.signalCardText}>{currentSignal.title}</Text>
+                <Text style={styles.signalCardSubText}>{currentSignal.label}</Text>
+              </View>
             </View>
           </View>
 
           <View style={styles.infoZone}>
-            <View style={styles.infoCard}>
-              <View style={styles.infoBlock}>
-                <Text style={styles.infoLabel}>남은 거리</Text>
-                <Text style={styles.infoValue}>{distanceValue}</Text>
-              </View>
+            <View style={styles.cardShell}>
+              <View style={styles.infoCard}>
+                <View style={styles.infoBlock}>
+                  <Text style={styles.infoLabel}>남은 거리</Text>
+                  <Text style={styles.infoValue}>{distanceValue}</Text>
+                </View>
 
-              <View style={styles.infoDivider} />
+                <View style={styles.infoDivider} />
 
-              <View style={styles.infoBlock}>
-                <Text style={styles.infoLabel}>현재 속도</Text>
-                <Text style={styles.infoValue}>{speedValue}</Text>
+                <View style={styles.infoBlock}>
+                  <Text style={styles.infoLabel}>현재 속도</Text>
+                  <Text style={styles.infoValue}>{speedValue}</Text>
+                </View>
               </View>
             </View>
           </View>
@@ -377,25 +356,18 @@ export default function HomeScreen() {
               accessibilityRole="button"
               accessibilityLabel="내비게이션 방향 전환"
               onPress={handleAdvanceDirection}
-              style={({ pressed }) => [styles.naviCard, pressed && styles.controlButtonPressed]}
+              style={({ pressed }) => [styles.cardShell, styles.naviShell, pressed && styles.controlButtonPressed]}
             >
-              <View style={styles.naviHeaderRow}>
-                <MaterialIcons name="near-me" size={28} color="#ffffff" />
-                <Text style={styles.naviProviderText}>{PROVIDER_LABEL[selectedNavigationProvider]}</Text>
-              </View>
-              <Text
-                style={[
-                  styles.naviArrowText,
-                  { fontSize: displayedArrowFontSize, lineHeight: displayedArrowFontSize + 4 },
-                ]}
-              >
-                {currentDirection.symbol}
-              </Text>
-              <Text numberOfLines={1} style={styles.naviText}>{currentDirection.label}</Text>
-              <Text numberOfLines={1} style={styles.naviInstruction}>{currentDirection.instruction}</Text>
-              <View style={styles.naviMetaGroup}>
-                <Text numberOfLines={1} style={styles.naviMetaText}>{locationStatus}</Text>
-                <Text numberOfLines={1} style={styles.naviMetaText}>{locationCoordsText}</Text>
+              <View style={styles.naviCard}>
+                <Text
+                  style={[
+                    styles.naviArrowText,
+                    { fontSize: displayedArrowFontSize, lineHeight: displayedArrowFontSize + 2 },
+                  ]}
+                >
+                  {currentDirection.symbol}
+                </Text>
+                <Text numberOfLines={1} style={styles.naviText}>{currentDirection.label}</Text>
               </View>
             </Pressable>
           </View>
@@ -407,7 +379,7 @@ export default function HomeScreen() {
                 onPress={() => router.push("/camera")}
                 style={({ pressed }) => [styles.controlButton, pressed && styles.controlButtonPressed]}
               >
-                <MaterialIcons name="photo-camera" size={28} color="#11181c" />
+                <MaterialIcons name="photo-camera" size={22} color="#11161d" />
                 <Text numberOfLines={1} style={styles.controlText}>카메라</Text>
               </Pressable>
 
@@ -416,7 +388,7 @@ export default function HomeScreen() {
                 onPress={() => router.push("/")}
                 style={({ pressed }) => [styles.controlButton, pressed && styles.controlButtonPressed]}
               >
-                <MaterialIcons name="home" size={28} color="#11181c" />
+                <MaterialIcons name="home" size={22} color="#11161d" />
                 <Text numberOfLines={1} style={styles.controlText}>홈</Text>
               </Pressable>
 
@@ -425,20 +397,12 @@ export default function HomeScreen() {
                 onPress={() => router.push("/settings")}
                 style={({ pressed }) => [styles.controlButton, pressed && styles.controlButtonPressed]}
               >
-                <MaterialIcons name="settings" size={28} color="#11181c" />
+                <MaterialIcons name="settings" size={22} color="#11161d" />
                 <Text numberOfLines={1} style={styles.controlText}>설정</Text>
               </Pressable>
             </View>
           </View>
 
-          <View style={styles.footerStatusRow}>
-            <Text style={styles.footerStatusText}>
-              목적지 {quickDestinationCount}개 · 음성 {voiceLengthLabel} · 스타일 {voiceStyleLabel}
-            </Text>
-            <Text numberOfLines={1} style={styles.footerSubStatusText}>
-              미리듣기: {voicePreviewText}
-            </Text>
-          </View>
         </View>
       </View>
     </ScreenContainer>
@@ -448,79 +412,103 @@ export default function HomeScreen() {
 const styles = StyleSheet.create({
   screenContent: {
     flex: 1,
-    paddingHorizontal: 16,
-    paddingTop: 8,
-    paddingBottom: 8,
+    backgroundColor: "#05070b",
   },
   root: {
     flex: 1,
+    backgroundColor: "#05070b",
+    paddingHorizontal: 10,
+    paddingTop: 8,
+    paddingBottom: 10,
   },
   headerZone: {
-    paddingBottom: 10,
+    paddingBottom: 6,
     alignItems: "center",
     justifyContent: "center",
-    gap: 4,
+    gap: 1,
   },
   headerText: {
-    fontSize: 24,
-    fontWeight: "bold",
-    color: "#11181c",
-    letterSpacing: -0.3,
+    fontSize: 12,
+    fontWeight: "600",
+    color: "#717887",
+    letterSpacing: 0.2,
   },
   headerSubText: {
-    fontSize: 18,
-    fontWeight: "bold",
-    color: "#4b5563",
+    fontSize: 11,
+    fontWeight: "600",
+    color: "#8f98a4",
   },
   mainColumn: {
     flex: 1,
     flexDirection: "column",
+    gap: 10,
   },
   visualZone: {
-    flex: 2,
+    flex: 2.12,
     justifyContent: "center",
+  },
+  cardShell: {
+    flex: 1,
+    padding: 2,
+    borderRadius: 30,
+    backgroundColor: "#9098a3",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.14)",
+    shadowColor: "#000000",
+    shadowOpacity: 0.32,
+    shadowRadius: 16,
+    shadowOffset: { width: 0, height: 10 },
+    elevation: 8,
   },
   signalCard: {
     flex: 1,
-    borderRadius: 34,
+    borderRadius: 28,
     alignItems: "center",
     justifyContent: "center",
     paddingHorizontal: 24,
-    shadowColor: "#000000",
-    shadowOpacity: 0.18,
-    shadowRadius: 14,
-    shadowOffset: { width: 0, height: 8 },
-    elevation: 5,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.5)",
+    overflow: "hidden",
+  },
+  signalHighlight: {
+    position: "absolute",
+    top: 8,
+    left: 10,
+    right: 10,
+    height: 12,
+    borderRadius: 999,
+    backgroundColor: "rgba(255,255,255,0.28)",
   },
   signalCardText: {
-    fontSize: 52,
-    fontWeight: "bold",
-    color: "#ffffff",
-    letterSpacing: 1,
+    fontSize: 34,
+    fontWeight: "900",
+    color: "#f8fbff",
+    letterSpacing: 0.4,
+    textShadowColor: "rgba(0,0,0,0.12)",
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 1,
   },
   signalCardSubText: {
-    marginTop: 18,
-    fontSize: 28,
-    fontWeight: "bold",
-    color: "#ffffff",
+    marginTop: 10,
+    fontSize: 18,
+    fontWeight: "800",
+    color: "#f8fbff",
   },
   infoZone: {
-    flex: 1.5,
+    flex: 1.28,
     justifyContent: "center",
-    paddingTop: 14,
-    paddingBottom: 12,
   },
   infoCard: {
     flex: 1,
     borderRadius: 28,
-    backgroundColor: "#f3f4f6",
+    backgroundColor: "#d9dbe0",
     borderWidth: 1,
-    borderColor: "#e5e7eb",
+    borderColor: "rgba(255,255,255,0.65)",
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingHorizontal: 12,
-    columnGap: 8,
+    paddingHorizontal: 16,
+    columnGap: 10,
   },
   infoBlock: {
     flex: 1,
@@ -530,97 +518,74 @@ const styles = StyleSheet.create({
   infoDivider: {
     width: 1,
     alignSelf: "stretch",
-    backgroundColor: "#d1d5db",
-    marginVertical: 18,
+    backgroundColor: "#b6bcc5",
+    marginVertical: 22,
   },
   infoLabel: {
-    fontSize: 20,
-    fontWeight: "bold",
-    color: "#4b5563",
+    fontSize: 17,
+    fontWeight: "700",
+    color: "#5f6672",
     textAlign: "center",
-    lineHeight: 24,
+    lineHeight: 21,
   },
   infoValue: {
     marginTop: 10,
-    fontSize: 28,
-    fontWeight: "bold",
-    color: "#11181c",
+    fontSize: 20,
+    fontWeight: "900",
+    color: "#161b22",
     textAlign: "center",
-    lineHeight: 32,
+    lineHeight: 24,
   },
   naviZone: {
-    flex: 1,
+    flex: 1.1,
     justifyContent: "center",
-    paddingBottom: 10,
+  },
+  naviShell: {
+    padding: 2,
   },
   naviCard: {
     flex: 1,
-    borderRadius: 26,
-    backgroundColor: "#1f2937",
+    borderRadius: 28,
+    backgroundColor: "#d7d9df",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.65)",
     alignItems: "center",
     justifyContent: "center",
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    overflow: "hidden",
-    rowGap: 2,
-  },
-  naviHeaderRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-  },
-  naviProviderText: {
-    fontSize: 16,
-    fontWeight: "bold",
-    color: "#ffffff",
+    paddingHorizontal: 18,
+    paddingVertical: 10,
   },
   naviArrowText: {
-    marginTop: 2,
-    fontWeight: "bold",
-    color: "#ffffff",
+    marginTop: -4,
+    fontWeight: "800",
+    color: "#2b3240",
     textAlign: "center",
   },
   naviText: {
-    marginTop: 0,
-    fontSize: 24,
-    fontWeight: "bold",
-    color: "#ffffff",
-  },
-  naviInstruction: {
-    marginTop: 2,
-    fontSize: 17,
-    lineHeight: 21,
-    fontWeight: "bold",
-    color: "#d1d5db",
-    textAlign: "center",
-  },
-  naviMetaGroup: {
-    marginTop: 4,
-    width: "100%",
-    gap: 2,
-  },
-  naviMetaText: {
-    fontSize: 13,
-    lineHeight: 16,
-    fontWeight: "bold",
-    color: "#9ca3af",
-    textAlign: "center",
+    marginTop: -12,
+    fontSize: 18,
+    fontWeight: "800",
+    color: "#1e2430",
   },
   bottomBarZone: {
-    flex: 0.5,
+    flex: 0.46,
     justifyContent: "center",
   },
   bottomBar: {
     flex: 1,
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "space-around",
-    borderRadius: 22,
-    backgroundColor: "#f3f4f6",
+    justifyContent: "space-between",
+    borderRadius: 20,
+    backgroundColor: "#cfd3da",
     borderWidth: 1,
-    borderColor: "#e5e7eb",
-    paddingHorizontal: 12,
+    borderColor: "rgba(255,255,255,0.7)",
+    paddingHorizontal: 10,
     columnGap: 8,
+    shadowColor: "#000000",
+    shadowOpacity: 0.18,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 4,
   },
   controlButton: {
     width: "31%",
@@ -630,41 +595,28 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: 6,
-    paddingVertical: 10,
-    borderRadius: 16,
+    gap: 5,
+    paddingVertical: 7,
+    borderRadius: 15,
+    backgroundColor: "#eef1f5",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.88)",
+    shadowColor: "#6b7280",
+    shadowOpacity: 0.18,
+    shadowRadius: 6,
+    shadowOffset: { width: -2, height: -2 },
+    elevation: 3,
   },
   controlButtonPressed: {
-    opacity: 0.72,
-    transform: [{ scale: 0.98 }],
+    opacity: 0.84,
+    transform: [{ scale: 0.985 }],
   },
   controlText: {
-    fontSize: 20,
-    lineHeight: 24,
-    fontWeight: "bold",
-    color: "#11181c",
+    fontSize: 14,
+    lineHeight: 17,
+    fontWeight: "800",
+    color: "#11161d",
     textAlign: "center",
     flexShrink: 1,
-  },
-  footerStatusRow: {
-    paddingTop: 6,
-    paddingHorizontal: 10,
-    alignItems: "center",
-    gap: 2,
-  },
-  footerStatusText: {
-    fontSize: 14,
-    lineHeight: 18,
-    fontWeight: "bold",
-    color: "#4b5563",
-    textAlign: "center",
-  },
-  footerSubStatusText: {
-    fontSize: 12,
-    lineHeight: 16,
-    fontWeight: "600",
-    color: "#6b7280",
-    textAlign: "center",
-    width: "100%",
   },
 });

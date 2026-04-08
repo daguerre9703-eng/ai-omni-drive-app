@@ -9,13 +9,13 @@ describe("home hud layout regression", () => {
   it("uses the requested vertical flex distribution across the driving hud", () => {
     expect(homeSource).toContain('flexDirection: "column"');
     expect(homeSource).toContain('visualZone');
-    expect(homeSource).toContain('flex: 2');
+    expect(homeSource).toContain('flex: 2.12');
     expect(homeSource).toContain('infoZone');
-    expect(homeSource).toContain('flex: 1.5');
+    expect(homeSource).toContain('flex: 1.28');
     expect(homeSource).toContain('naviZone');
-    expect(homeSource).toContain('flex: 1');
+    expect(homeSource).toContain('flex: 1.1');
     expect(homeSource).toContain('bottomBarZone');
-    expect(homeSource).toContain('flex: 0.5');
+    expect(homeSource).toContain('flex: 0.46');
   });
 
   it("cycles the signal card with the requested dynamic colors and labels", () => {
@@ -26,6 +26,7 @@ describe("home hud layout regression", () => {
     expect(homeSource).toContain('title: "SLOW"');
     expect(homeSource).toContain('title: "GO"');
     expect(homeSource).toContain('backgroundColor: currentSignal.backgroundColor');
+    expect(homeSource).toContain('signalHighlight');
   });
 
   it("keeps live signal preview rotation enabled", () => {
@@ -54,24 +55,24 @@ describe("home hud layout regression", () => {
     expect(homeSource).toContain('카메라');
     expect(homeSource).toContain('홈');
     expect(homeSource).toContain('설정');
-    expect(homeSource).toContain('fontSize: 24');
-    expect(homeSource).toContain('fontWeight: "bold"');
-    expect(homeSource).toContain('fontSize: 52');
+    expect(homeSource).toContain('fontSize: 34');
+    expect(homeSource).toContain('fontSize: 20');
+    expect(homeSource).toContain('fontSize: 18');
   });
 
-  it("keeps compact spacing rules that prevent text overlap on narrow screens", () => {
-    expect(homeSource).toContain('const displayedArrowFontSize = Math.min(arrowFontSize, 120);');
-    expect(homeSource).toContain('columnGap: 8');
-    expect(homeSource).toContain('fontSize: 20');
-    expect(homeSource).toContain('fontSize: 28');
-    expect(homeSource).toContain('naviMetaGroup');
-    expect(homeSource).toContain('numberOfLines={1} style={styles.naviMetaText}');
-    expect(homeSource).toContain('footerSubStatusText');
-    expect(homeSource).toContain('미리듣기: {voicePreviewText}');
+  it("restores the apple silver and dark space card language without extra footer clutter", () => {
+    expect(homeSource).toContain('backgroundColor: "#05070b"');
+    expect(homeSource).toContain('backgroundColor: "#d9dbe0"');
+    expect(homeSource).toContain('backgroundColor: "#d7d9df"');
+    expect(homeSource).toContain('backgroundColor: "#cfd3da"');
+    expect(homeSource).toContain('backgroundColor: "#eef1f5"');
+    expect(homeSource).toContain('borderColor: "rgba(255,255,255,0.65)"');
+    expect(homeSource).not.toContain('미리듣기: {voicePreviewText}');
+    expect(homeSource).not.toContain('footerStatusRow');
   });
 
   it("builds the bottom bar with balanced spacing and working routes", () => {
-    expect(homeSource).toContain('justifyContent: "space-around"');
+    expect(homeSource).toContain('justifyContent: "space-between"');
     expect(homeSource).toContain('router.push("/camera")');
     expect(homeSource).toContain('router.push("/settings")');
     expect(tabSource).toContain('display: "none"');

@@ -42,16 +42,14 @@ describe("camera and settings controls regression", () => {
     expect(settingsSource).toContain('selectedStyleLabel');
   });
 
-  it("keeps home HUD voice template generation and speech dispatch wired", () => {
+  it("keeps home HUD voice template generation and voice settings preview wired", () => {
     const homeSource = readFileSync(join(process.cwd(), "app/(tabs)/index.tsx"), "utf8");
     const voiceSource = readFileSync(join(process.cwd(), "lib/voice-alerts.ts"), "utf8");
 
     expect(homeSource).toContain('buildVoiceAlertText');
-    expect(homeSource).toContain('speakVoiceAlert');
     expect(homeSource).toContain('voiceAlertLength');
     expect(homeSource).toContain('voiceAlertStyle');
     expect(homeSource).toContain('voicePreviewText');
-    expect(homeSource).toContain('await speakVoiceAlert(event, voiceSettings, { distanceMeters });');
     expect(voiceSource).toContain('export type VoiceAlertLength = "detailed" | "brief";');
     expect(voiceSource).toContain('export type VoiceAlertStyle = "standard" | "calm" | "urgent";');
     expect(voiceSource).toContain('export function buildVoiceAlertText(');
