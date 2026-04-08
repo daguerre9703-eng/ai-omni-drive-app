@@ -42,7 +42,7 @@ describe("home hud layout regression", () => {
     expect(homeSource).toContain('onPress={handleAdvanceDirection}');
     expect(homeSource).toContain('symbol: "↑"');
     expect(homeSource).toContain('label: "직진"');
-    expect(homeSource).toContain('fontSize: 30');
+    expect(homeSource).toContain('fontSize: 24');
   });
 
   it("preserves gps linked updates and compact bottom controls", () => {

@@ -57,9 +57,9 @@ const PROVIDER_LABEL: Record<NavigationProvider, string> = {
 };
 
 const ARROW_FONT_SIZE: Record<ArrowSize, number> = {
-  large: 112,
-  xlarge: 126,
-  huge: 140,
+  large: 72,
+  xlarge: 82,
+  huge: 92,
 };
 
 const GPS_ROUTE_POINTS: RoutePoint[] = [
@@ -338,7 +338,7 @@ export default function HomeScreen() {
             accessibilityRole="button"
             accessibilityLabel="내비게이션 방향 전환"
             onPress={handleAdvanceDirection}
-            style={({ pressed }) => [styles.cardShell, pressed && styles.pressedCardShell]}
+            style={({ pressed }) => [styles.cardShell, styles.directionShell, pressed && styles.pressedCardShell]}
           >
             <View style={styles.directionCard}>
               <Text style={[styles.directionArrow, { fontSize: arrowFontSize, lineHeight: arrowFontSize + 6 }]}>
@@ -393,11 +393,11 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: "#BFC3C9",
     paddingHorizontal: 8,
-    paddingTop: 4,
-    paddingBottom: 8,
+    paddingTop: 2,
+    paddingBottom: 4,
   },
   topBar: {
-    height: 32,
+    height: 28,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -423,9 +423,10 @@ const styles = StyleSheet.create({
     color: "#49515D",
   },
   mainStack: {
-    flex: 1,
-    gap: 12,
-    paddingTop: 6,
+    flexGrow: 0,
+    flexShrink: 0,
+    gap: 8,
+    paddingTop: 3,
   },
   cardShell: {
     borderRadius: 22,
@@ -444,7 +445,7 @@ const styles = StyleSheet.create({
     transform: [{ scale: 0.992 }],
   },
   signalCard: {
-    minHeight: 214,
+    minHeight: 178,
     borderRadius: 20,
     alignItems: "center",
     justifyContent: "center",
@@ -454,8 +455,8 @@ const styles = StyleSheet.create({
     elevation: 2,
   },
   signalTitle: {
-    fontSize: 56,
-    lineHeight: 62,
+    fontSize: 54,
+    lineHeight: 58,
     fontWeight: "900",
     color: "#F7FAFC",
     textShadowColor: "rgba(95, 103, 112, 0.35)",
@@ -463,9 +464,9 @@ const styles = StyleSheet.create({
     textShadowRadius: 3,
   },
   signalLabel: {
-    marginTop: 8,
-    fontSize: 26,
-    lineHeight: 30,
+    marginTop: 6,
+    fontSize: 24,
+    lineHeight: 28,
     fontWeight: "900",
     color: "#F7FAFC",
     textShadowColor: "rgba(95, 103, 112, 0.32)",
@@ -473,7 +474,7 @@ const styles = StyleSheet.create({
     textShadowRadius: 2,
   },
   infoCard: {
-    minHeight: 126,
+    minHeight: 102,
     borderRadius: 20,
     backgroundColor: "#D4D7DD",
     flexDirection: "row",
@@ -489,45 +490,52 @@ const styles = StyleSheet.create({
     width: 1,
     alignSelf: "stretch",
     backgroundColor: "#B5BBC4",
-    marginVertical: 18,
+    marginVertical: 16,
   },
   metricLabel: {
-    fontSize: 18,
-    lineHeight: 22,
+    fontSize: 17,
+    lineHeight: 20,
     fontWeight: "800",
     color: "#5A6270",
     textAlign: "center",
   },
   metricValue: {
-    marginTop: 6,
-    fontSize: 20,
-    lineHeight: 24,
+    marginTop: 4,
+    fontSize: 19,
+    lineHeight: 22,
     fontWeight: "900",
     color: "#161C27",
     textAlign: "center",
   },
+  directionShell: {
+    flexGrow: 0,
+    flexShrink: 0,
+  },
   directionCard: {
-    minHeight: 186,
+    minHeight: 108,
     borderRadius: 20,
     backgroundColor: "#D4D7DD",
     alignItems: "center",
     justifyContent: "center",
+    paddingTop: 2,
+    paddingBottom: 2,
   },
   directionArrow: {
     fontWeight: "900",
     color: "#343C49",
     textAlign: "center",
+    marginBottom: -10,
   },
   directionLabel: {
-    marginTop: -6,
-    fontSize: 30,
-    lineHeight: 34,
+    marginTop: -8,
+    fontSize: 24,
+    lineHeight: 28,
     fontWeight: "900",
     color: "#202733",
     textAlign: "center",
   },
   bottomBarShell: {
-    marginTop: 4,
+    marginTop: 0,
     borderRadius: 18,
     padding: 2,
     backgroundColor: "#AEB3BB",
@@ -540,18 +548,18 @@ const styles = StyleSheet.create({
     elevation: 3,
   },
   bottomBar: {
-    minHeight: 44,
+    minHeight: 34,
     borderRadius: 16,
     backgroundColor: "#D4D7DD",
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingHorizontal: 8,
-    gap: 8,
+    paddingHorizontal: 6,
+    gap: 6,
   },
   bottomButton: {
     flex: 1,
-    minHeight: 32,
+    minHeight: 26,
     borderRadius: 12,
     backgroundColor: "#E6E9EE",
     borderWidth: 1,
@@ -566,8 +574,8 @@ const styles = StyleSheet.create({
     transform: [{ scale: 0.985 }],
   },
   bottomButtonText: {
-    fontSize: 12,
-    lineHeight: 14,
+    fontSize: 11,
+    lineHeight: 13,
     fontWeight: "800",
     color: "#1F2937",
   },
