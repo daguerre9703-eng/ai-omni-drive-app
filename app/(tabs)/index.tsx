@@ -68,6 +68,7 @@ const DIRECTION_META: Record<
 
 export default function HomeScreen() {
   const [signalIndex, setSignalIndex] = useState(0);
+  const [directionIndex, setDirectionIndex] = useState(0);
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -77,12 +78,23 @@ export default function HomeScreen() {
     return () => clearInterval(interval);
   }, []);
 
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setDirectionIndex((prev) => (prev + 1) % DIRECTION_SEQUENCE.length);
+    }, 2200);
+
+    return () => clearInterval(interval);
+  }, []);
+
   const signalState = SIGNAL_SEQUENCE[signalIndex];
   const currentSignal = useMemo(() => SIGNAL_META[signalState], [signalState]);
   const currentDirection = useMemo(
-    () => DIRECTION_META[DIRECTION_SEQUENCE[signalIndex % DIRECTION_SEQUENCE.length]],
-    [signalIndex],
+    () => DIRECTION_META[DIRECTION_SEQUENCE[directionIndex]],
+    [directionIndex],
   );
+  const handleAdvanceDirection = () => {
+    setDirectionIndex((prev) => (prev + 1) % DIRECTION_SEQUENCE.length);
+  };
 
   return (
     <ScreenContainer style={styles.screenContent}>
@@ -116,10 +128,15 @@ export default function HomeScreen() {
           </View>
 
           <View style={styles.naviZone}>
-            <View style={styles.naviCard}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="내비게이션 방향 전환"
+              onPress={handleAdvanceDirection}
+              style={({ pressed }) => [styles.naviCard, pressed && styles.controlButtonPressed]}
+            >
               <MaterialIcons name={currentDirection.icon} size={74} color="#ffffff" />
               <Text style={styles.naviText}>{currentDirection.label}</Text>
-            </View>
+            </Pressable>
           </View>
 
           <View style={styles.bottomBarZone}>
