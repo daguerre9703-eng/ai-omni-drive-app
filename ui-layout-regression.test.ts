@@ -15,7 +15,7 @@ describe("home hud layout regression", () => {
   });
 
   it("keeps the large traffic signal card with rotating go slow stop states", () => {
-    expect(homeSource).toContain('const [signalIndex, setSignalIndex] = useState(0);');
+    expect(homeSource).toContain('const [signalIndex, setSignalIndex] = useState(1);');
     expect(homeSource).toContain('10000');
     expect(homeSource).toContain('title: "GO"');
     expect(homeSource).toContain('title: "SLOW"');
@@ -24,9 +24,9 @@ describe("home hud layout regression", () => {
     expect(homeSource).toContain('cardBackground: "#FFE37A"');
     expect(homeSource).toContain('cardBackground: "#C41230"');
     expect(homeSource).toContain('justifyContent: "flex-start"');
-    expect(homeSource).toContain('paddingTop: 24');
-    expect(homeSource).toContain('marginTop: 74');
-    expect(homeSource).toContain('fontSize: 88');
+    expect(homeSource).toContain('paddingTop: 16');
+    expect(homeSource).toContain('marginTop: 54');
+    expect(homeSource).toContain('fontSize: 74');
   });
 
   it("keeps only the enlarged speed panel in the middle info area", () => {
@@ -49,7 +49,8 @@ describe("home hud layout regression", () => {
     expect(homeSource).toContain('symbol: "↑"');
     expect(homeSource).toContain('label: "직진"');
     expect(homeSource).toContain('huge: 122');
-    expect(homeSource).toContain('fontSize: 40');
+    expect(homeSource).toContain('fontSize: Math.round(arrowFontSize * 1.56 * homeMasterSettings.sizes.directionArrow)');
+    expect(homeSource).not.toContain('styles.directionLabel');
   });
 
   it("preserves gps linked updates and compact bottom controls", () => {

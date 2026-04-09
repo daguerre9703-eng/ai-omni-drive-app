@@ -163,7 +163,7 @@ const DIRECTION_META: Record<
 };
 
 export default function HomeScreen() {
-  const [signalIndex, setSignalIndex] = useState(0);
+  const [signalIndex, setSignalIndex] = useState(1);
   const [directionIndex, setDirectionIndex] = useState(0);
   const [voiceGuideEnabled, setVoiceGuideEnabled] = useState(DEFAULT_SETTINGS.voiceGuideEnabled);
   const [voiceAlertLength, setVoiceAlertLength] = useState<VoiceAlertLength>(
@@ -467,29 +467,17 @@ export default function HomeScreen() {
                 style={[
                   styles.directionArrow,
                   {
-                    fontSize: Math.round(arrowFontSize * 2.35 * homeMasterSettings.sizes.directionArrow),
-                    lineHeight: Math.round(arrowFontSize * 2.35 * homeMasterSettings.sizes.directionArrow) + 10,
+                    fontSize: Math.round(arrowFontSize * 1.56 * homeMasterSettings.sizes.directionArrow),
+                    lineHeight: Math.round(arrowFontSize * 1.56 * homeMasterSettings.sizes.directionArrow) + 8,
                     fontFamily: sharedFontFamily,
-                    textShadowColor: "rgba(255,255,255,0.32)",
-                    transform: [{ scaleX: 1.34 }, { scaleY: 1.12 }],
+                    textShadowColor: "rgba(255,255,255,0.28)",
+                    transform: [{ scaleX: 1.12 }, { scaleY: 1.02 }],
                   },
                 ]}
               >
                 {currentDirection.symbol}
               </Text>
-              <Text
-                style={[
-                  styles.directionLabel,
-                  {
-                    fontSize: homeMasterSettings.sizes.directionLabel,
-                    lineHeight: homeMasterSettings.sizes.directionLabel + 4,
-                    fontFamily: sharedFontFamily,
-                    fontWeight: sharedFontWeight,
-                  },
-                ]}
-              >
-                {currentDirection.label}
-              </Text>
+
             </View>
           </Pressable>
         </View>
@@ -581,9 +569,9 @@ const styles = StyleSheet.create({
   },
   mainStack: {
     flex: 1,
-    gap: 6,
-    paddingTop: 2,
-    paddingBottom: 42,
+    gap: 8,
+    paddingTop: 4,
+    paddingBottom: 56,
   },
   cardShell: {
     borderRadius: 22,
@@ -598,10 +586,10 @@ const styles = StyleSheet.create({
     elevation: 0,
   },
   signalShell: {
-    flex: 1.72,
+    flex: 1.48,
   },
   infoShell: {
-    flex: 0.68,
+    flex: 0.74,
   },
   pressedCardShell: {
     opacity: 0.94,
@@ -609,12 +597,12 @@ const styles = StyleSheet.create({
   },
   signalCard: {
     flex: 1,
-    minHeight: 272,
+    minHeight: 236,
     borderRadius: 20,
     alignItems: "center",
     justifyContent: "flex-start",
-    paddingTop: 24,
-    paddingBottom: 26,
+    paddingTop: 16,
+    paddingBottom: 18,
     borderWidth: 1,
     borderColor: "rgba(236, 241, 244, 0.9)",
     shadowOpacity: 0.18,
@@ -623,8 +611,8 @@ const styles = StyleSheet.create({
     elevation: 2,
   },
   signalTitle: {
-    fontSize: 48,
-    lineHeight: 52,
+    fontSize: 34,
+    lineHeight: 38,
     fontWeight: "900",
     color: "#F6F8FA",
     letterSpacing: -1,
@@ -633,9 +621,9 @@ const styles = StyleSheet.create({
     textShadowRadius: 3,
   },
   signalDistanceValue: {
-    marginTop: 74,
-    fontSize: 88,
-    lineHeight: 92,
+    marginTop: 54,
+    fontSize: 74,
+    lineHeight: 78,
     fontWeight: "700",
     color: "#111111",
     textAlign: "center",
@@ -643,7 +631,7 @@ const styles = StyleSheet.create({
   },
   infoCard: {
     flex: 1,
-    minHeight: 110,
+    minHeight: 102,
     borderRadius: 20,
     backgroundColor: "#D0D3D9",
     borderWidth: 1,
@@ -659,8 +647,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
   },
   metricLabel: {
-    fontSize: 17,
-    lineHeight: 20,
+    fontSize: 11,
+    lineHeight: 14,
     fontWeight: "800",
     color: "#646C79",
     textAlign: "center",
@@ -674,28 +662,28 @@ const styles = StyleSheet.create({
     textAlign: "center",
   },
   speedOnlyValue: {
-    marginTop: 6,
-    fontSize: 38,
-    lineHeight: 42,
+    marginTop: 4,
+    fontSize: 28,
+    lineHeight: 32,
     fontWeight: "900",
     color: "#1C2430",
     textAlign: "center",
     letterSpacing: -1.2,
   },
   directionShell: {
-    flex: 1.08,
+    flex: 1.34,
   },
   directionCard: {
     flex: 1,
-    minHeight: 126,
+    minHeight: 182,
     borderRadius: 20,
     backgroundColor: "#D0D3D9",
     borderWidth: 1,
     borderColor: "#ECEEF2",
     alignItems: "center",
     justifyContent: "center",
-    paddingTop: 0,
-    paddingBottom: 10,
+    paddingTop: 4,
+    paddingBottom: 42,
     shadowColor: "#F8FAFC",
     shadowOpacity: 0.24,
     shadowRadius: 6,
@@ -705,26 +693,17 @@ const styles = StyleSheet.create({
     fontWeight: "900",
     color: "#DCE2EA",
     textAlign: "center",
-    marginBottom: -18,
+    marginBottom: -4,
     textShadowColor: "rgba(76, 85, 99, 0.45)",
     textShadowOffset: { width: 0, height: 4 },
     textShadowRadius: 4,
     transform: [{ scaleX: 1.18 }, { scaleY: 1.08 }],
   },
-  directionLabel: {
-    marginTop: -2,
-    fontSize: 40,
-    lineHeight: 44,
-    fontWeight: "900",
-    color: "#2A313D",
-    textAlign: "center",
-    letterSpacing: -1.2,
-  },
   bottomBarShell: {
     position: "absolute",
-    left: 6,
-    right: 6,
-    bottom: 2,
+    left: 8,
+    right: 8,
+    bottom: 4,
     marginTop: 0,
     borderRadius: 30,
     padding: 4,
@@ -738,7 +717,7 @@ const styles = StyleSheet.create({
     elevation: 3,
   },
   bottomBar: {
-    minHeight: 74,
+    minHeight: 64,
     borderRadius: 26,
     backgroundColor: "rgba(229, 234, 240, 0.9)",
     borderWidth: 1.2,
