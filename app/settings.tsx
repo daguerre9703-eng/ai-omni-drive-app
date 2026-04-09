@@ -5,7 +5,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Alert,
   LayoutChangeEvent,
-  Modal,
   PanResponder,
   Pressable,
   ScrollView,
@@ -45,13 +44,6 @@ import {
 
 type NavigationProvider = "kakaomap" | "inavi" | "tmap";
 type ArrowSize = "large" | "xlarge" | "huge";
-type SettingsModalKey =
-  | "voice"
-  | "navigation"
-  | "display"
-  | "layout"
-  | "font"
-  | "destinations";
 
 type AppSettings = {
   voiceGuideEnabled: boolean;
@@ -64,8 +56,8 @@ type AppSettings = {
 };
 
 const SETTINGS_STORAGE_KEY = "ai-omni-drive:settings";
-const HOME_PREVIEW_WIDTH = 296;
-const HOME_PREVIEW_HEIGHT = 326;
+const HOME_PREVIEW_WIDTH = 300;
+const HOME_PREVIEW_HEIGHT = 320;
 const POSITION_LIMIT_X = 46;
 const POSITION_LIMIT_Y = 38;
 
@@ -128,73 +120,16 @@ const ARROW_SIZE_OPTIONS: Array<{
 ];
 
 const ELEMENT_LABEL: Record<HudElementKey, string> = {
-  signal: "신호 카드",
+  signal: "신호등 카드",
   speed: "속도계",
   direction: "화살표",
 };
 
 const PREVIEW_BASE_POSITION: Record<HudElementKey, ElementOffset> = {
-  signal: { x: 24, y: 16 },
-  speed: { x: 28, y: 146 },
-  direction: { x: 26, y: 216 },
+  signal: { x: 26, y: 20 },
+  speed: { x: 28, y: 164 },
+  direction: { x: 34, y: 244 },
 };
-
-const DIRECTION_ICON_BY_ARROW_SIZE: Record<ArrowSize, number> = {
-  large: 94,
-  xlarge: 116,
-  huge: 136,
-};
-
-const GRID_CARDS: Array<{
-  key: SettingsModalKey;
-  title: string;
-  subtitle: string;
-  icon: keyof typeof MaterialIcons.glyphMap;
-  tint: string;
-}> = [
-  {
-    key: "voice",
-    title: "음성 안내",
-    subtitle: "말투와 길이",
-    icon: "campaign",
-    tint: "#EEF3FF",
-  },
-  {
-    key: "navigation",
-    title: "내비 연동",
-    subtitle: "티맵·카카오·아이나비",
-    icon: "near-me",
-    tint: "#EEF8F1",
-  },
-  {
-    key: "display",
-    title: "시인성",
-    subtitle: "크기와 명도",
-    icon: "visibility",
-    tint: "#FFF6E8",
-  },
-  {
-    key: "layout",
-    title: "배치",
-    subtitle: "위치·프리셋",
-    icon: "dashboard-customize",
-    tint: "#F2EEFF",
-  },
-  {
-    key: "font",
-    title: "폰트",
-    subtitle: "굵기와 스타일",
-    icon: "text-fields",
-    tint: "#F1F5F9",
-  },
-  {
-    key: "destinations",
-    title: "빠른 목적지",
-    subtitle: "자주 가는 곳",
-    icon: "bookmark",
-    tint: "#FFF1F2",
-  },
-];
 
 function SliderControl({
   title,
@@ -252,7 +187,7 @@ function SliderControl({
           onPress={() => onChange(Number(clampValue(value - step, min, max).toFixed(2)))}
           style={({ pressed }) => [styles.sliderStepButton, pressed && styles.buttonPressed]}
         >
-          <MaterialIcons name="remove" size={22} color="#0f172a" />
+          <MaterialIcons name="remove" size={24} color="#11181c" />
         </Pressable>
 
         <View
@@ -264,15 +199,7 @@ function SliderControl({
           style={styles.sliderTrack}
         >
           <View style={styles.sliderTrackBase} />
-          <View
-            style={[
-              styles.sliderTrackFill,
-              {
-                width: `${Math.max(0, Math.min(100, normalized * 100))}%`,
-                backgroundColor: accentColor,
-              },
-            ]}
-          />
+          <View style={[styles.sliderTrackFill, { width: `${Math.max(0, Math.min(100, normalized * 100))}%`, backgroundColor: accentColor }]} />
           <View
             style={[
               styles.sliderThumb,
@@ -289,46 +216,10 @@ function SliderControl({
           onPress={() => onChange(Number(clampValue(value + step, min, max).toFixed(2)))}
           style={({ pressed }) => [styles.sliderStepButton, pressed && styles.buttonPressed]}
         >
-          <MaterialIcons name="add" size={22} color="#0f172a" />
+          <MaterialIcons name="add" size={24} color="#11181c" />
         </Pressable>
       </View>
     </View>
-  );
-}
-
-function OptionChip({
-  title,
-  description,
-  selected,
-  onPress,
-  icon,
-}: {
-  title: string;
-  description: string;
-  selected: boolean;
-  onPress: () => void;
-  icon?: keyof typeof MaterialIcons.glyphMap;
-}) {
-  return (
-    <Pressable
-      accessibilityRole="button"
-      onPress={onPress}
-      style={({ pressed }) => [
-        styles.optionChip,
-        selected && styles.optionChipSelected,
-        pressed && styles.buttonPressed,
-      ]}
-    >
-      <View style={styles.optionChipHeader}>
-        {icon ? (
-          <MaterialIcons name={icon} size={20} color={selected ? "#0f172a" : "#475569"} />
-        ) : null}
-        <Text style={[styles.optionChipTitle, selected && styles.optionChipTitleSelected]}>{title}</Text>
-      </View>
-      <Text style={[styles.optionChipDescription, selected && styles.optionChipDescriptionSelected]}>
-        {description}
-      </Text>
-    </Pressable>
   );
 }
 
@@ -350,8 +241,7 @@ export default function SettingsScreen() {
   const [homeMasterSettings, setHomeMasterSettings] = useState<HomeMasterSettings>(
     DEFAULT_HOME_MASTER_SETTINGS,
   );
-  const [selectedHudElement, setSelectedHudElement] = useState<HudElementKey>("direction");
-  const [activeModal, setActiveModal] = useState<SettingsModalKey | null>(null);
+  const [selectedHudElement, setSelectedHudElement] = useState<HudElementKey>("signal");
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const dragStartRef = useRef<Record<HudElementKey, ElementOffset>>({
@@ -473,10 +363,6 @@ export default function SettingsScreen() {
     return LAYOUT_PRESET_OPTIONS.find((option) => option.key === homeMasterSettings.layoutPreset)?.title ?? "균형형";
   }, [homeMasterSettings.layoutPreset]);
 
-  const selectedArrowLabel = useMemo(() => {
-    return ARROW_SIZE_OPTIONS.find((option) => option.key === arrowSize)?.title ?? "최대로";
-  }, [arrowSize]);
-
   const previewBackgroundColor = useMemo(() => {
     return getGrayBackgroundColor(
       homeMasterSettings.theme.backgroundGrayLightness,
@@ -550,6 +436,7 @@ export default function SettingsScreen() {
 
     setQuickDestinations((prev) => [...prev, trimmed]);
     setPendingDestination("");
+    Alert.alert("추가 완료", `빠른 목적지에 \"${trimmed}\"을 추가했습니다.`);
   };
 
   const handleRemoveDestination = (target: string) => {
@@ -604,7 +491,7 @@ export default function SettingsScreen() {
     try {
       await AsyncStorage.setItem(HOME_MASTER_STORAGE_KEY, JSON.stringify(nextSettings));
       setHomeMasterSettings(nextSettings);
-      setSelectedHudElement("direction");
+      setSelectedHudElement("signal");
       Alert.alert("원상복구 완료", "홈 화면 전문 설정을 기본 균형형 테마로 되돌렸습니다.");
     } catch (error) {
       console.error("Failed to reset home master settings", error);
@@ -636,6 +523,12 @@ export default function SettingsScreen() {
       Alert.alert(
         "저장 완료",
         `${currentProviderLabel} 연동 설정과 ${selectedLengthLabel} · ${selectedStyleLabel} 음성 스타일을 저장했습니다.`,
+        [
+          {
+            text: "확인",
+            onPress: () => router.back(),
+          },
+        ],
       );
     } catch (error) {
       console.error("Failed to save settings", error);
@@ -644,481 +537,6 @@ export default function SettingsScreen() {
       setIsSaving(false);
     }
   };
-
-  const openModal = (key: SettingsModalKey) => setActiveModal(key);
-  const closeModal = () => setActiveModal(null);
-
-  const modalTitle = useMemo(() => {
-    return GRID_CARDS.find((item) => item.key === activeModal)?.title ?? "설정";
-  }, [activeModal]);
-
-  const modalSubtitle = useMemo(() => {
-    return GRID_CARDS.find((item) => item.key === activeModal)?.subtitle ?? "상세 조정";
-  }, [activeModal]);
-
-  const renderModalContent = () => {
-    if (!activeModal) {
-      return null;
-    }
-
-    if (activeModal === "voice") {
-      return (
-        <View style={styles.modalSectionStack}>
-          <View style={styles.modalInlineCard}>
-            <View style={styles.modalInlineHeader}>
-              <View>
-                <Text style={styles.modalInlineTitle}>AI 음성 가이드</Text>
-                <Text style={styles.modalInlineDescription}>안내 멘트와 음성 출력을 함께 제어합니다.</Text>
-              </View>
-              <Switch value={voiceGuideEnabled} onValueChange={setVoiceGuideEnabled} />
-            </View>
-          </View>
-
-          <View style={styles.modalInlineCard}>
-            <Text style={styles.groupTitle}>안내 길이</Text>
-            <View style={styles.optionWrap}>
-              {VOICE_LENGTH_OPTIONS.map((option) => (
-                <OptionChip
-                  key={option.key}
-                  title={option.title}
-                  description={option.description}
-                  selected={voiceAlertLength === option.key}
-                  onPress={() => setVoiceAlertLength(option.key)}
-                />
-              ))}
-            </View>
-          </View>
-
-          <View style={styles.modalInlineCard}>
-            <Text style={styles.groupTitle}>말투 스타일</Text>
-            <View style={styles.optionWrap}>
-              {VOICE_STYLE_OPTIONS.map((option) => (
-                <OptionChip
-                  key={option.key}
-                  title={option.title}
-                  description={option.description}
-                  selected={voiceAlertStyle === option.key}
-                  onPress={() => setVoiceAlertStyle(option.key)}
-                />
-              ))}
-            </View>
-          </View>
-        </View>
-      );
-    }
-
-    if (activeModal === "navigation") {
-      return (
-        <View style={styles.modalSectionStack}>
-          <View style={styles.modalInlineCard}>
-            <View style={styles.modalInlineHeader}>
-              <View>
-                <Text style={styles.modalInlineTitle}>실시간 길안내 연동</Text>
-                <Text style={styles.modalInlineDescription}>외부 내비 앱 연결 상태를 기본값으로 저장합니다.</Text>
-              </View>
-              <Switch value={liveRouteSyncEnabled} onValueChange={setLiveRouteSyncEnabled} />
-            </View>
-          </View>
-
-          <View style={styles.modalInlineCard}>
-            <Text style={styles.groupTitle}>기본 내비게이션</Text>
-            <View style={styles.optionWrap}>
-              {PROVIDER_OPTIONS.map((option) => (
-                <OptionChip
-                  key={option.key}
-                  title={option.title}
-                  description={option.description}
-                  selected={selectedNavigationProvider === option.key}
-                  onPress={() => setSelectedNavigationProvider(option.key)}
-                  icon={option.icon}
-                />
-              ))}
-            </View>
-          </View>
-        </View>
-      );
-    }
-
-    if (activeModal === "display") {
-      return (
-        <View style={styles.modalSectionStack}>
-          <View style={styles.modalInlineCard}>
-            <Text style={styles.groupTitle}>화살표 크기</Text>
-            <View style={styles.optionWrap}>
-              {ARROW_SIZE_OPTIONS.map((option) => (
-                <OptionChip
-                  key={option.key}
-                  title={option.title}
-                  description={option.description}
-                  selected={arrowSize === option.key}
-                  onPress={() => setArrowSize(option.key)}
-                />
-              ))}
-            </View>
-          </View>
-
-          <SliderControl
-            title="배경 그레이 명도"
-            description="눈부심 없이 편안한 밝기를 직접 찾습니다."
-            min={72}
-            max={96}
-            step={1}
-            value={homeMasterSettings.theme.backgroundGrayLightness}
-            displayValue={`${Math.round(homeMasterSettings.theme.backgroundGrayLightness)}%`}
-            onChange={(value) =>
-              patchHomeMasterSettings({
-                theme: {
-                  ...homeMasterSettings.theme,
-                  backgroundGrayLightness: value,
-                },
-              })
-            }
-            accentColor="#475569"
-          />
-
-          <SliderControl
-            title="배경 그레이 채도"
-            description="색 기운을 줄이거나 조금 남겨 화면 대비를 조절합니다."
-            min={0}
-            max={20}
-            step={1}
-            value={homeMasterSettings.theme.backgroundGraySaturation}
-            displayValue={`${Math.round(homeMasterSettings.theme.backgroundGraySaturation)}%`}
-            onChange={(value) =>
-              patchHomeMasterSettings({
-                theme: {
-                  ...homeMasterSettings.theme,
-                  backgroundGraySaturation: value,
-                },
-              })
-            }
-            accentColor="#64748b"
-          />
-
-          <SliderControl
-            title="화살표 카드 크기"
-            description="길안내 카드의 시인성을 우선으로 키웁니다."
-            min={1}
-            max={1.7}
-            step={0.05}
-            value={homeMasterSettings.sizes.directionArrow}
-            displayValue={`${Math.round(homeMasterSettings.sizes.directionArrow * 100)}%`}
-            onChange={(value) => updateSizeValue("directionArrow", value)}
-            accentColor="#0f172a"
-          />
-
-          <SliderControl
-            title="방향 라벨 크기"
-            description="좌회전·직진 문구를 크게 읽히게 조절합니다."
-            min={24}
-            max={44}
-            step={1}
-            value={homeMasterSettings.sizes.directionLabel}
-            displayValue={`${Math.round(homeMasterSettings.sizes.directionLabel)}pt`}
-            onChange={(value) => updateSizeValue("directionLabel", value)}
-            accentColor="#1d4ed8"
-          />
-
-          <SliderControl
-            title="속도 숫자 크기"
-            description="속도계 숫자를 멀리서도 알아볼 수 있게 키웁니다."
-            min={22}
-            max={44}
-            step={1}
-            value={homeMasterSettings.sizes.speedValue}
-            displayValue={`${Math.round(homeMasterSettings.sizes.speedValue)}pt`}
-            onChange={(value) => updateSizeValue("speedValue", value)}
-            accentColor="#0f766e"
-          />
-
-          <SliderControl
-            title="거리 숫자 크기"
-            description="신호 카드의 남은 거리 숫자를 또렷하게 조절합니다."
-            min={28}
-            max={54}
-            step={1}
-            value={homeMasterSettings.sizes.distanceValue}
-            displayValue={`${Math.round(homeMasterSettings.sizes.distanceValue)}pt`}
-            onChange={(value) => updateSizeValue("distanceValue", value)}
-            accentColor="#16a34a"
-          />
-        </View>
-      );
-    }
-
-    if (activeModal === "layout") {
-      return (
-        <View style={styles.modalSectionStack}>
-          <View style={styles.modalInlineCard}>
-            <Text style={styles.groupTitle}>위치 프리셋</Text>
-            <View style={styles.optionWrap}>
-              {LAYOUT_PRESET_OPTIONS.map((preset) => (
-                <OptionChip
-                  key={preset.key}
-                  title={preset.title}
-                  description={preset.description}
-                  selected={homeMasterSettings.layoutPreset === preset.key}
-                  onPress={() => handleApplyLayoutPreset(preset.key as LayoutPresetKey)}
-                />
-              ))}
-            </View>
-          </View>
-
-          <SliderControl
-            title="상하 밸런스"
-            description="HUD 전체의 위아래 여백을 한 번에 맞춥니다."
-            min={-30}
-            max={30}
-            step={1}
-            value={homeMasterSettings.verticalBalance}
-            displayValue={`${homeMasterSettings.verticalBalance > 0 ? "+" : ""}${Math.round(homeMasterSettings.verticalBalance)}`}
-            onChange={(value) => patchHomeMasterSettings({ verticalBalance: value })}
-            accentColor="#7c3aed"
-          />
-
-          <View style={styles.modalInlineCard}>
-            <Text style={styles.groupTitle}>선택 요소 미세 이동</Text>
-            <Text style={styles.groupHelper}>{ELEMENT_LABEL[selectedHudElement]} 기준으로 한 칸씩 이동합니다.</Text>
-            <View style={styles.selectorRow}>
-              {(["signal", "speed", "direction"] as HudElementKey[]).map((key) => (
-                <Pressable
-                  key={key}
-                  accessibilityRole="button"
-                  onPress={() => setSelectedHudElement(key)}
-                  style={({ pressed }) => [
-                    styles.selectorButton,
-                    selectedHudElement === key && styles.selectorButtonSelected,
-                    pressed && styles.buttonPressed,
-                  ]}
-                >
-                  <Text
-                    style={[
-                      styles.selectorButtonText,
-                      selectedHudElement === key && styles.selectorButtonTextSelected,
-                    ]}
-                  >
-                    {ELEMENT_LABEL[key]}
-                  </Text>
-                </Pressable>
-              ))}
-            </View>
-            <View style={styles.directionPadRow}>
-              <Pressable
-                accessibilityRole="button"
-                onPress={() => handleMoveSelectedElement("y", -4)}
-                style={({ pressed }) => [styles.padButton, pressed && styles.buttonPressed]}
-              >
-                <MaterialIcons name="keyboard-arrow-up" size={28} color="#0f172a" />
-              </Pressable>
-            </View>
-            <View style={styles.directionPadMiddleRow}>
-              <Pressable
-                accessibilityRole="button"
-                onPress={() => handleMoveSelectedElement("x", -4)}
-                style={({ pressed }) => [styles.padButton, pressed && styles.buttonPressed]}
-              >
-                <MaterialIcons name="keyboard-arrow-left" size={28} color="#0f172a" />
-              </Pressable>
-              <Pressable
-                accessibilityRole="button"
-                onPress={() => handleMoveSelectedElement("x", 4)}
-                style={({ pressed }) => [styles.padButton, pressed && styles.buttonPressed]}
-              >
-                <MaterialIcons name="keyboard-arrow-right" size={28} color="#0f172a" />
-              </Pressable>
-            </View>
-            <View style={styles.directionPadRow}>
-              <Pressable
-                accessibilityRole="button"
-                onPress={() => handleMoveSelectedElement("y", 4)}
-                style={({ pressed }) => [styles.padButton, pressed && styles.buttonPressed]}
-              >
-                <MaterialIcons name="keyboard-arrow-down" size={28} color="#0f172a" />
-              </Pressable>
-            </View>
-          </View>
-
-          <View style={styles.modalInlineCard}>
-            <Text style={styles.groupTitle}>HUD 미리보기</Text>
-            <Text style={styles.groupHelper}>카드를 직접 끌어서 위치를 조절한 뒤 확인만 누르면 됩니다.</Text>
-            <View style={[styles.previewFrame, { backgroundColor: previewBackgroundColor }]}> 
-              <View style={[styles.previewGhostCard, styles.previewSignalGhost, { backgroundColor: previewShellColor }]} />
-              <View style={[styles.previewGhostCard, styles.previewSpeedGhost, { backgroundColor: previewShellColor }]} />
-              <View style={[styles.previewGhostCard, styles.previewDirectionGhost, { backgroundColor: previewShellColor }]} />
-
-              <View
-                style={[
-                  styles.previewCard,
-                  styles.previewSignalCard,
-                  previewPositionStyle("signal"),
-                  selectedHudElement === "signal" && styles.previewCardSelected,
-                  { backgroundColor: previewShellColor },
-                ]}
-                {...signalPanResponder.panHandlers}
-              >
-                <Text style={[styles.previewSignalText, { fontFamily: sharedFontFamily, fontWeight: sharedFontWeight }]}>GO</Text>
-              </View>
-
-              <View
-                style={[
-                  styles.previewCard,
-                  styles.previewSpeedCard,
-                  previewPositionStyle("speed"),
-                  selectedHudElement === "speed" && styles.previewCardSelected,
-                  { backgroundColor: previewShellColor },
-                ]}
-                {...speedPanResponder.panHandlers}
-              >
-                <Text style={[styles.previewSpeedLabel, { fontFamily: sharedFontFamily, fontWeight: sharedFontWeight }]}>현재 속도</Text>
-                <Text style={[styles.previewSpeedValue, { fontFamily: sharedFontFamily, fontWeight: sharedFontWeight }]}>18 km/h</Text>
-              </View>
-
-              <View
-                style={[
-                  styles.previewCard,
-                  styles.previewDirectionCard,
-                  previewPositionStyle("direction"),
-                  selectedHudElement === "direction" && styles.previewCardSelected,
-                  { backgroundColor: previewShellColor },
-                ]}
-                {...directionPanResponder.panHandlers}
-              >
-                <MaterialIcons name="west" size={DIRECTION_ICON_BY_ARROW_SIZE[arrowSize]} color="#1e293b" />
-                <Text style={[styles.previewDirectionText, { fontFamily: sharedFontFamily, fontWeight: sharedFontWeight }]}>좌회전</Text>
-              </View>
-            </View>
-          </View>
-        </View>
-      );
-    }
-
-    if (activeModal === "font") {
-      return (
-        <View style={styles.modalSectionStack}>
-          <View style={styles.modalInlineCard}>
-            <Text style={styles.groupTitle}>폰트 스타일</Text>
-            <View style={styles.optionWrap}>
-              {FONT_PRESET_OPTIONS.map((option) => (
-                <OptionChip
-                  key={option.key}
-                  title={option.title}
-                  description={option.description}
-                  selected={homeMasterSettings.fontPreset === option.key}
-                  onPress={() => patchHomeMasterSettings({ fontPreset: option.key as FontPreset })}
-                />
-              ))}
-            </View>
-          </View>
-
-          <SliderControl
-            title="신호 카드 제목 크기"
-            description="GO, STOP 같은 신호 제목을 더 강하게 보이게 조절합니다."
-            min={24}
-            max={46}
-            step={1}
-            value={homeMasterSettings.sizes.signalTitle}
-            displayValue={`${Math.round(homeMasterSettings.sizes.signalTitle)}pt`}
-            onChange={(value) => updateSizeValue("signalTitle", value)}
-            accentColor="#dc2626"
-          />
-
-          <SliderControl
-            title="HUD 쉘 투명도"
-            description="카드 배경의 존재감을 줄이거나 더 또렷하게 올립니다."
-            min={0.25}
-            max={0.9}
-            step={0.05}
-            value={homeMasterSettings.theme.hudShellOpacity}
-            displayValue={`${Math.round(homeMasterSettings.theme.hudShellOpacity * 100)}%`}
-            onChange={(value) =>
-              patchHomeMasterSettings({
-                theme: {
-                  ...homeMasterSettings.theme,
-                  hudShellOpacity: value,
-                },
-              })
-            }
-            accentColor="#f97316"
-          />
-        </View>
-      );
-    }
-
-    return (
-      <View style={styles.modalSectionStack}>
-        <View style={styles.modalInlineCard}>
-          <Text style={styles.groupTitle}>빠른 목적지</Text>
-          <Text style={styles.groupHelper}>자주 가는 곳을 한 번에 저장하고 필요 없는 항목은 바로 정리합니다.</Text>
-          <View style={styles.destinationInputRow}>
-            <TextInput
-              value={pendingDestination}
-              onChangeText={setPendingDestination}
-              placeholder="예: 병원, 충전소"
-              placeholderTextColor="#94a3b8"
-              style={styles.destinationInput}
-              returnKeyType="done"
-              onSubmitEditing={handleAddDestination}
-            />
-            <Pressable
-              accessibilityRole="button"
-              onPress={handleAddDestination}
-              style={({ pressed }) => [styles.destinationAddButton, pressed && styles.buttonPressed]}
-            >
-              <Text style={styles.destinationAddButtonText}>추가</Text>
-            </Pressable>
-          </View>
-          <View style={styles.destinationWrap}>
-            {quickDestinations.map((destination) => (
-              <View key={destination} style={styles.destinationChip}>
-                <Text style={styles.destinationChipText}>{destination}</Text>
-                <Pressable
-                  accessibilityRole="button"
-                  onPress={() => handleRemoveDestination(destination)}
-                  style={({ pressed }) => [styles.destinationRemoveButton, pressed && styles.buttonPressed]}
-                >
-                  <MaterialIcons name="close" size={16} color="#475569" />
-                </Pressable>
-              </View>
-            ))}
-          </View>
-        </View>
-
-        <View style={styles.modalInlineCard}>
-          <Text style={styles.groupTitle}>나만의 테마 1</Text>
-          <Text style={styles.groupHelper}>대표님이 맞춘 HUD 조합을 저장하거나 즉시 기본값으로 되돌릴 수 있습니다.</Text>
-          <View style={styles.modalActionRow}>
-            <Pressable
-              accessibilityRole="button"
-              onPress={handleSaveHomeTheme}
-              style={({ pressed }) => [styles.secondaryActionButton, pressed && styles.buttonPressed]}
-            >
-              <MaterialIcons name="bookmark-added" size={20} color="#0f172a" />
-              <Text style={styles.secondaryActionText}>테마 저장</Text>
-            </Pressable>
-            <Pressable
-              accessibilityRole="button"
-              onPress={handleResetHomeTheme}
-              style={({ pressed }) => [styles.goldActionButton, pressed && styles.buttonPressed]}
-            >
-              <MaterialIcons name="restart-alt" size={20} color="#5b4100" />
-              <Text style={styles.goldActionText}>원상복구</Text>
-            </Pressable>
-          </View>
-        </View>
-      </View>
-    );
-  };
-
-  if (isLoading) {
-    return (
-      <ScreenContainer style={styles.screenContent}>
-        <View style={styles.loadingState}>
-          <Text style={styles.loadingTitle}>설정 불러오는 중</Text>
-          <Text style={styles.loadingDescription}>그리드 설정 센터를 준비하고 있습니다.</Text>
-        </View>
-      </ScreenContainer>
-    );
-  }
 
   return (
     <ScreenContainer style={styles.screenContent}>
@@ -1129,123 +547,719 @@ export default function SettingsScreen() {
             onPress={() => router.back()}
             style={({ pressed }) => [styles.backButton, pressed && styles.buttonPressed]}
           >
-            <MaterialIcons name="arrow-back" size={22} color="#11181c" />
+            <MaterialIcons name="arrow-back" size={28} color="#11181c" />
             <Text style={styles.backText}>뒤로</Text>
           </Pressable>
 
-          <View style={styles.headerTitleWrap}>
-            <Text style={styles.headerEyebrow}>Home-Master Custom</Text>
-            <Text style={styles.headerTitle}>설정 센터</Text>
-          </View>
+          <Text style={styles.headerTitle}>설정</Text>
 
-          <Pressable
-            accessibilityRole="button"
-            onPress={handleSave}
-            disabled={isSaving}
-            style={({ pressed }) => [
-              styles.headerSaveButton,
-              isSaving && styles.headerSaveButtonDisabled,
-              pressed && !isSaving && styles.buttonPressed,
-            ]}
-          >
-            <Text style={styles.headerSaveText}>{isSaving ? "저장 중" : "저장"}</Text>
-          </Pressable>
+          <View style={styles.headerSpacer} />
         </View>
 
-        <View style={styles.heroCard}>
-          <View style={styles.heroCopy}>
-            <Text style={styles.heroTitle}>한 화면에서 바로 조정</Text>
-            <Text style={styles.heroDescription}>
-              길안내 시인성, 음성, 배치, 폰트, 빠른 목적지를 큰 아이콘 카드로 묶고 상세 조정은 중앙 팝업에서 끝냅니다.
+        <ScrollView
+          contentContainerStyle={styles.scrollContent}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+        >
+          <View style={styles.summaryCard}>
+            <Text style={styles.summaryTitle}>현재 연동 상태</Text>
+            <Text style={styles.summaryValue}>{currentProviderLabel}</Text>
+            <Text style={styles.summaryDescription}>
+              음성 길이 {selectedLengthLabel} · 음성 스타일 {selectedStyleLabel} 기준으로 안내 문구를 조합합니다.
             </Text>
           </View>
-          <View style={styles.heroPillWrap}>
-            <View style={styles.heroPill}>
-              <Text style={styles.heroPillLabel}>현재 내비</Text>
-              <Text style={styles.heroPillValue}>{currentProviderLabel}</Text>
+
+          <View style={styles.sectionCard}>
+            <View style={styles.sectionHeaderRow}>
+              <Text style={styles.sectionTitle}>AI 음성 가이드</Text>
+              <Switch value={voiceGuideEnabled} onValueChange={setVoiceGuideEnabled} />
             </View>
-            <View style={styles.heroPill}>
-              <Text style={styles.heroPillLabel}>화살표</Text>
-              <Text style={styles.heroPillValue}>{selectedArrowLabel}</Text>
-            </View>
-            <View style={styles.heroPill}>
-              <Text style={styles.heroPillLabel}>폰트</Text>
-              <Text style={styles.heroPillValue}>{selectedFontLabel}</Text>
+            <Text style={styles.sectionDescription}>
+              음성 안내를 끄면 HUD 문구만 갱신하고 소리는 출력하지 않습니다.
+            </Text>
+          </View>
+
+          <View style={styles.sectionCard}>
+            <Text style={styles.sectionTitle}>안내 음성 길이</Text>
+            <Text style={styles.sectionDescription}>
+              상세 안내 또는 간략 안내 중 하나를 골라 문장 길이를 직접 조절할 수 있습니다.
+            </Text>
+
+            <View style={styles.optionList}>
+              {VOICE_LENGTH_OPTIONS.map((option) => {
+                const selected = option.key === voiceAlertLength;
+
+                return (
+                  <Pressable
+                    key={option.key}
+                    accessibilityRole="button"
+                    onPress={() => setVoiceAlertLength(option.key)}
+                    style={({ pressed }) => [
+                      styles.arrowOption,
+                      selected && styles.arrowOptionSelected,
+                      pressed && styles.buttonPressed,
+                    ]}
+                  >
+                    <Text style={[styles.arrowOptionTitle, selected && styles.arrowOptionTitleSelected]}>
+                      {option.title}
+                    </Text>
+                    <Text
+                      style={[
+                        styles.arrowOptionDescription,
+                        selected && styles.arrowOptionDescriptionSelected,
+                      ]}
+                    >
+                      {option.description}
+                    </Text>
+                  </Pressable>
+                );
+              })}
             </View>
           </View>
-        </View>
 
-        <View style={styles.gridWrap}>
-          {GRID_CARDS.map((card) => (
-            <Pressable
-              key={card.key}
-              accessibilityRole="button"
-              onPress={() => openModal(card.key)}
-              style={({ pressed }) => [styles.gridCard, { backgroundColor: card.tint }, pressed && styles.buttonPressed]}
-            >
-              <View style={styles.gridIconCircle}>
-                <MaterialIcons name={card.icon} size={28} color="#0f172a" />
+          <View style={styles.sectionCard}>
+            <Text style={styles.sectionTitle}>안내 음성 스타일</Text>
+            <Text style={styles.sectionDescription}>
+              같은 문구라도 말하는 속도와 톤을 다르게 적용해 원하는 안내 느낌을 선택할 수 있습니다.
+            </Text>
+
+            <View style={styles.optionList}>
+              {VOICE_STYLE_OPTIONS.map((option) => {
+                const selected = option.key === voiceAlertStyle;
+
+                return (
+                  <Pressable
+                    key={option.key}
+                    accessibilityRole="button"
+                    onPress={() => setVoiceAlertStyle(option.key)}
+                    style={({ pressed }) => [
+                      styles.arrowOption,
+                      selected && styles.arrowOptionSelected,
+                      pressed && styles.buttonPressed,
+                    ]}
+                  >
+                    <Text style={[styles.arrowOptionTitle, selected && styles.arrowOptionTitleSelected]}>
+                      {option.title}
+                    </Text>
+                    <Text
+                      style={[
+                        styles.arrowOptionDescription,
+                        selected && styles.arrowOptionDescriptionSelected,
+                      ]}
+                    >
+                      {option.description}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+          </View>
+
+          <View style={styles.sectionCard}>
+            <View style={styles.sectionHeaderRow}>
+              <Text style={styles.sectionTitle}>실시간 경로 연동</Text>
+              <Switch value={liveRouteSyncEnabled} onValueChange={setLiveRouteSyncEnabled} />
+            </View>
+            <Text style={styles.sectionDescription}>
+              현재 위치와 외부 내비게이션 경로 흐름을 기준으로 화살표를 전환합니다.
+            </Text>
+          </View>
+
+          <View style={styles.sectionCard}>
+            <Text style={styles.sectionTitle}>연동 내비게이션 선택</Text>
+            <Text style={styles.sectionDescription}>
+              카카오맵, 아이나비, 티맵 중 주로 쓰는 앱을 선택하세요.
+            </Text>
+
+            <View style={styles.optionList}>
+              {PROVIDER_OPTIONS.map((option) => {
+                const selected = option.key === selectedNavigationProvider;
+
+                return (
+                  <Pressable
+                    key={option.key}
+                    accessibilityRole="button"
+                    onPress={() => setSelectedNavigationProvider(option.key)}
+                    style={({ pressed }) => [
+                      styles.providerOption,
+                      selected && styles.providerOptionSelected,
+                      pressed && styles.buttonPressed,
+                    ]}
+                  >
+                    <MaterialIcons
+                      name={option.icon}
+                      size={28}
+                      color={selected ? "#ffffff" : "#11181c"}
+                    />
+                    <View style={styles.providerTextGroup}>
+                      <Text style={[styles.providerTitle, selected && styles.providerTitleSelected]}>
+                        {option.title}
+                      </Text>
+                      <Text
+                        style={[
+                          styles.providerDescription,
+                          selected && styles.providerDescriptionSelected,
+                        ]}
+                      >
+                        {option.description}
+                      </Text>
+                    </View>
+                  </Pressable>
+                );
+              })}
+            </View>
+          </View>
+
+          <View style={styles.sectionCard}>
+            <Text style={styles.sectionTitle}>화살표 크기</Text>
+            <Text style={styles.sectionDescription}>
+              운전 중 더 잘 보이도록 방향 화살표 크기를 고를 수 있습니다.
+            </Text>
+
+            <View style={styles.optionList}>
+              {ARROW_SIZE_OPTIONS.map((option) => {
+                const selected = option.key === arrowSize;
+
+                return (
+                  <Pressable
+                    key={option.key}
+                    accessibilityRole="button"
+                    onPress={() => setArrowSize(option.key)}
+                    style={({ pressed }) => [
+                      styles.arrowOption,
+                      selected && styles.arrowOptionSelected,
+                      pressed && styles.buttonPressed,
+                    ]}
+                  >
+                    <Text style={[styles.arrowOptionTitle, selected && styles.arrowOptionTitleSelected]}>
+                      {option.title}
+                    </Text>
+                    <Text
+                      style={[
+                        styles.arrowOptionDescription,
+                        selected && styles.arrowOptionDescriptionSelected,
+                      ]}
+                    >
+                      {option.description}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+          </View>
+
+          <View style={styles.masterCenterCard}>
+            <View style={styles.masterCenterHeader}>
+              <Text style={styles.masterCenterEyebrow}>홈 화면 전문 설정 센터</Text>
+              <Text style={styles.masterCenterTitle}>운전 HUD 레이아웃 마스터</Text>
+              <Text style={styles.masterCenterDescription}>
+                홈 화면의 신호 카드, 속도계, 방향 화살표를 직접 움직이고 크기·폰트·그레이 톤·Glow 강도를 조절해 나만의 주행 시야를 만들 수 있습니다.
+              </Text>
+            </View>
+
+            <View style={styles.masterSummaryRow}>
+              <View style={styles.masterSummaryPill}>
+                <Text style={styles.masterSummaryLabel}>프리셋</Text>
+                <Text style={styles.masterSummaryValue}>{selectedLayoutLabel}</Text>
               </View>
-              <Text style={styles.gridCardTitle}>{card.title}</Text>
-              <Text style={styles.gridCardSubtitle}>{card.subtitle}</Text>
-            </Pressable>
-          ))}
-        </View>
+              <View style={styles.masterSummaryPill}>
+                <Text style={styles.masterSummaryLabel}>폰트</Text>
+                <Text style={styles.masterSummaryValue}>{selectedFontLabel}</Text>
+              </View>
+              <View style={styles.masterSummaryPill}>
+                <Text style={styles.masterSummaryLabel}>저장 슬롯</Text>
+                <Text style={styles.masterSummaryValue}>{homeMasterSettings.savedThemeLabel}</Text>
+              </View>
+            </View>
 
-        <View style={styles.footerRow}>
-          <View style={styles.footerSummaryCard}>
-            <Text style={styles.footerSummaryLabel}>길안내 카드</Text>
-            <Text style={styles.footerSummaryValue}>{selectedLayoutLabel}</Text>
+            <View style={styles.masterPreviewWrap}>
+              <View
+                style={[
+                  styles.homePreviewBoard,
+                  {
+                    width: HOME_PREVIEW_WIDTH,
+                    height: HOME_PREVIEW_HEIGHT,
+                    backgroundColor: previewBackgroundColor,
+                  },
+                ]}
+              >
+                <Text style={styles.homePreviewCaption}>드래그해서 위치 조절</Text>
+
+                <View
+                  {...signalPanResponder.panHandlers}
+                  style={[
+                    styles.previewSignalBlock,
+                    previewPositionStyle("signal"),
+                    selectedHudElement === "signal" && styles.previewBlockSelected,
+                    {
+                      width: 246,
+                      shadowColor: `rgba(196,18,48,${0.28 * homeMasterSettings.signalGlow.red})`,
+                    },
+                  ]}
+                >
+                  <View style={[styles.previewCardShell, { backgroundColor: previewShellColor }]}>
+                    <View style={styles.previewSignalInner}>
+                      <Text
+                        style={[
+                          styles.previewSignalTitle,
+                          {
+                            fontSize: homeMasterSettings.sizes.signalTitle,
+                            lineHeight: homeMasterSettings.sizes.signalTitle + 4,
+                            fontFamily: sharedFontFamily,
+                            fontWeight: sharedFontWeight,
+                          },
+                        ]}
+                      >
+                        STOP
+                      </Text>
+                      <Text
+                        style={[
+                          styles.previewSignalDistance,
+                          {
+                            fontSize: homeMasterSettings.sizes.distanceValue,
+                            lineHeight: homeMasterSettings.sizes.distanceValue + 4,
+                            fontFamily: sharedFontFamily,
+                            fontWeight: sharedFontWeight,
+                          },
+                        ]}
+                      >
+                        128m
+                      </Text>
+                    </View>
+                  </View>
+                </View>
+
+                <View
+                  {...speedPanResponder.panHandlers}
+                  style={[
+                    styles.previewSpeedBlock,
+                    previewPositionStyle("speed"),
+                    selectedHudElement === "speed" && styles.previewBlockSelected,
+                    { width: 242 },
+                  ]}
+                >
+                  <View style={[styles.previewCardShell, { backgroundColor: previewShellColor }]}>
+                    <View style={styles.previewSpeedInner}>
+                      <Text style={[styles.previewSpeedLabel, { fontFamily: sharedFontFamily, fontWeight: sharedFontWeight }]}>현재 속도</Text>
+                      <Text
+                        style={[
+                          styles.previewSpeedValue,
+                          {
+                            fontSize: homeMasterSettings.sizes.speedValue,
+                            lineHeight: homeMasterSettings.sizes.speedValue + 4,
+                            fontFamily: sharedFontFamily,
+                            fontWeight: sharedFontWeight,
+                          },
+                        ]}
+                      >
+                        18
+                      </Text>
+                    </View>
+                  </View>
+                </View>
+
+                <View
+                  {...directionPanResponder.panHandlers}
+                  style={[
+                    styles.previewDirectionBlock,
+                    previewPositionStyle("direction"),
+                    selectedHudElement === "direction" && styles.previewBlockSelected,
+                    { width: 234 },
+                  ]}
+                >
+                  <View style={[styles.previewCardShell, { backgroundColor: previewShellColor }]}>
+                    <View style={styles.previewDirectionInner}>
+                      <Text
+                        style={[
+                          styles.previewDirectionArrow,
+                          {
+                            fontSize: Math.round(118 * homeMasterSettings.sizes.directionArrow),
+                            lineHeight: Math.round(118 * homeMasterSettings.sizes.directionArrow) + 2,
+                            fontFamily: sharedFontFamily,
+                            fontWeight: "900",
+                            textShadowColor: `rgba(255,255,255,${0.24 * homeMasterSettings.signalGlow.green})`,
+                          },
+                        ]}
+                      >
+                        ↑
+                      </Text>
+                      <Text
+                        style={[
+                          styles.previewDirectionLabel,
+                          {
+                            fontSize: homeMasterSettings.sizes.directionLabel,
+                            lineHeight: homeMasterSettings.sizes.directionLabel + 2,
+                            fontFamily: sharedFontFamily,
+                            fontWeight: sharedFontWeight,
+                          },
+                        ]}
+                      >
+                        직진
+                      </Text>
+                    </View>
+                  </View>
+                </View>
+              </View>
+            </View>
+
+            <View style={styles.masterSectionCard}>
+              <Text style={styles.masterSectionTitle}>1. 위치 및 레이아웃 프리셋</Text>
+              <Text style={styles.sectionDescription}>
+                프리셋을 고른 뒤 미리보기 HUD 요소를 직접 드래그하거나 미세 이동 버튼으로 위치를 잡을 수 있습니다.
+              </Text>
+
+              <View style={styles.optionList}>
+                {LAYOUT_PRESET_OPTIONS.map((option) => {
+                  const selected = option.key === homeMasterSettings.layoutPreset;
+
+                  return (
+                    <Pressable
+                      key={option.key}
+                      accessibilityRole="button"
+                      onPress={() => handleApplyLayoutPreset(option.key)}
+                      style={({ pressed }) => [
+                        styles.arrowOption,
+                        selected && styles.arrowOptionSelected,
+                        pressed && styles.buttonPressed,
+                      ]}
+                    >
+                      <Text style={[styles.arrowOptionTitle, selected && styles.arrowOptionTitleSelected]}>
+                        {option.title}
+                      </Text>
+                      <Text
+                        style={[
+                          styles.arrowOptionDescription,
+                          selected && styles.arrowOptionDescriptionSelected,
+                        ]}
+                      >
+                        {option.description}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+
+              <SliderControl
+                title="상하 여백 밸런스"
+                description="전체 HUD를 위·아래로 움직이며 황금 비율을 맞춥니다."
+                min={-24}
+                max={24}
+                step={2}
+                value={homeMasterSettings.verticalBalance}
+                displayValue={`${homeMasterSettings.verticalBalance > 0 ? "+" : ""}${homeMasterSettings.verticalBalance}`}
+                onChange={(nextValue) => patchHomeMasterSettings({ verticalBalance: nextValue })}
+              />
+
+              <View style={styles.selectionWrap}>
+                <Text style={styles.selectionLabel}>선택한 요소</Text>
+                <View style={styles.elementChipRow}>
+                  {(["signal", "speed", "direction"] as HudElementKey[]).map((elementKey) => {
+                    const selected = elementKey === selectedHudElement;
+
+                    return (
+                      <Pressable
+                        key={elementKey}
+                        accessibilityRole="button"
+                        onPress={() => setSelectedHudElement(elementKey)}
+                        style={({ pressed }) => [
+                          styles.elementChip,
+                          selected && styles.elementChipSelected,
+                          pressed && styles.buttonPressed,
+                        ]}
+                      >
+                        <Text style={[styles.elementChipText, selected && styles.elementChipTextSelected]}>
+                          {ELEMENT_LABEL[elementKey]}
+                        </Text>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+              </View>
+
+              <View style={styles.nudgeGrid}>
+                <View style={styles.nudgeSpacer} />
+                <Pressable
+                  accessibilityRole="button"
+                  onPress={() => handleMoveSelectedElement("y", -4)}
+                  style={({ pressed }) => [styles.nudgeButton, pressed && styles.buttonPressed]}
+                >
+                  <MaterialIcons name="keyboard-arrow-up" size={28} color="#11181c" />
+                </Pressable>
+                <View style={styles.nudgeSpacer} />
+                <Pressable
+                  accessibilityRole="button"
+                  onPress={() => handleMoveSelectedElement("x", -4)}
+                  style={({ pressed }) => [styles.nudgeButton, pressed && styles.buttonPressed]}
+                >
+                  <MaterialIcons name="keyboard-arrow-left" size={28} color="#11181c" />
+                </Pressable>
+                <View style={styles.nudgeCenter}>
+                  <Text style={styles.nudgeCenterText}>{ELEMENT_LABEL[selectedHudElement]}</Text>
+                </View>
+                <Pressable
+                  accessibilityRole="button"
+                  onPress={() => handleMoveSelectedElement("x", 4)}
+                  style={({ pressed }) => [styles.nudgeButton, pressed && styles.buttonPressed]}
+                >
+                  <MaterialIcons name="keyboard-arrow-right" size={28} color="#11181c" />
+                </Pressable>
+                <View style={styles.nudgeSpacer} />
+                <Pressable
+                  accessibilityRole="button"
+                  onPress={() => handleMoveSelectedElement("y", 4)}
+                  style={({ pressed }) => [styles.nudgeButton, pressed && styles.buttonPressed]}
+                >
+                  <MaterialIcons name="keyboard-arrow-down" size={28} color="#11181c" />
+                </Pressable>
+                <View style={styles.nudgeSpacer} />
+              </View>
+            </View>
+
+            <View style={styles.masterSectionCard}>
+              <Text style={styles.masterSectionTitle}>2. 크기 및 폰트 마스터</Text>
+              <Text style={styles.sectionDescription}>
+                속도계 숫자, 남은 거리, 화살표 크기를 독립적으로 조절하고 주행용 굵은 서체를 선택할 수 있습니다.
+              </Text>
+
+              <SliderControl
+                title="속도계 숫자"
+                description="중앙 속도계 숫자 크기"
+                min={30}
+                max={58}
+                step={2}
+                value={homeMasterSettings.sizes.speedValue}
+                displayValue={`${homeMasterSettings.sizes.speedValue}pt`}
+                onChange={(nextValue) => updateSizeValue("speedValue", nextValue)}
+              />
+
+              <SliderControl
+                title="남은 거리 숫자"
+                description="상단 신호 카드 거리 숫자 크기"
+                min={72}
+                max={112}
+                step={2}
+                value={homeMasterSettings.sizes.distanceValue}
+                displayValue={`${homeMasterSettings.sizes.distanceValue}pt`}
+                onChange={(nextValue) => updateSizeValue("distanceValue", nextValue)}
+                accentColor="#C41230"
+              />
+
+              <SliderControl
+                title="방향 화살표"
+                description="하단 화살표의 크기 배율"
+                min={0.9}
+                max={1.8}
+                step={0.05}
+                value={homeMasterSettings.sizes.directionArrow}
+                displayValue={`${homeMasterSettings.sizes.directionArrow.toFixed(2)}x`}
+                onChange={(nextValue) => updateSizeValue("directionArrow", nextValue)}
+                accentColor="#8E96A3"
+              />
+
+              <View style={styles.selectionWrap}>
+                <Text style={styles.selectionLabel}>폰트 셀렉터</Text>
+                <View style={styles.optionList}>
+                  {FONT_PRESET_OPTIONS.map((option) => {
+                    const selected = option.key === homeMasterSettings.fontPreset;
+
+                    return (
+                      <Pressable
+                        key={option.key}
+                        accessibilityRole="button"
+                        onPress={() => patchHomeMasterSettings({ fontPreset: option.key as FontPreset })}
+                        style={({ pressed }) => [
+                          styles.arrowOption,
+                          selected && styles.arrowOptionSelected,
+                          pressed && styles.buttonPressed,
+                        ]}
+                      >
+                        <Text style={[styles.arrowOptionTitle, selected && styles.arrowOptionTitleSelected]}>
+                          {option.title}
+                        </Text>
+                        <Text
+                          style={[
+                            styles.arrowOptionDescription,
+                            selected && styles.arrowOptionDescriptionSelected,
+                          ]}
+                        >
+                          {option.description}
+                        </Text>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+              </View>
+            </View>
+
+            <View style={styles.masterSectionCard}>
+              <Text style={styles.masterSectionTitle}>3. 컬러 & 테마 믹서</Text>
+              <Text style={styles.sectionDescription}>
+                배경 그레이 명도·채도와 빨간불·초록불 Glow 강도를 조절해 HUD 대비를 맞춥니다.
+              </Text>
+
+              <SliderControl
+                title="배경 그레이 명도"
+                description="전체 배경 밝기"
+                min={50}
+                max={86}
+                step={2}
+                value={homeMasterSettings.theme.backgroundGrayLightness}
+                displayValue={`${homeMasterSettings.theme.backgroundGrayLightness}%`}
+                onChange={(nextValue) =>
+                  patchHomeMasterSettings({
+                    theme: {
+                      ...homeMasterSettings.theme,
+                      backgroundGrayLightness: nextValue,
+                    },
+                  })
+                }
+                accentColor="#7B8794"
+              />
+
+              <SliderControl
+                title="배경 그레이 채도"
+                description="메탈릭 톤의 차가운 회색 강도"
+                min={0}
+                max={20}
+                step={1}
+                value={homeMasterSettings.theme.backgroundGraySaturation}
+                displayValue={`${homeMasterSettings.theme.backgroundGraySaturation}%`}
+                onChange={(nextValue) =>
+                  patchHomeMasterSettings({
+                    theme: {
+                      ...homeMasterSettings.theme,
+                      backgroundGraySaturation: nextValue,
+                    },
+                  })
+                }
+                accentColor="#98A2B3"
+              />
+
+              <SliderControl
+                title="빨간불 Glow 강도"
+                description="정지 경고 빛 번짐 강도"
+                min={0.4}
+                max={2.2}
+                step={0.1}
+                value={homeMasterSettings.signalGlow.red}
+                displayValue={`${homeMasterSettings.signalGlow.red.toFixed(1)}x`}
+                onChange={(nextValue) =>
+                  patchHomeMasterSettings({
+                    signalGlow: {
+                      ...homeMasterSettings.signalGlow,
+                      red: nextValue,
+                    },
+                  })
+                }
+                accentColor="#C41230"
+              />
+
+              <SliderControl
+                title="초록불 Glow 강도"
+                description="진행 상태 빛 번짐 강도"
+                min={0.4}
+                max={2.2}
+                step={0.1}
+                value={homeMasterSettings.signalGlow.green}
+                displayValue={`${homeMasterSettings.signalGlow.green.toFixed(1)}x`}
+                onChange={(nextValue) =>
+                  patchHomeMasterSettings({
+                    signalGlow: {
+                      ...homeMasterSettings.signalGlow,
+                      green: nextValue,
+                    },
+                  })
+                }
+                accentColor="#42D64B"
+              />
+            </View>
+
+            <View style={styles.masterSectionCard}>
+              <Text style={styles.masterSectionTitle}>4. 저장 및 원상복구</Text>
+              <Text style={styles.sectionDescription}>
+                현재 배치를 나만의 테마 1로 저장하거나 기본 균형형 HUD로 즉시 되돌릴 수 있습니다.
+              </Text>
+
+              <View style={styles.masterActionRow}>
+                <Pressable
+                  accessibilityRole="button"
+                  onPress={handleSaveHomeTheme}
+                  style={({ pressed }) => [styles.goldActionButton, pressed && styles.buttonPressed]}
+                >
+                  <MaterialIcons name="workspace-premium" size={24} color="#3F2A00" />
+                  <Text style={styles.goldActionButtonText}>나만의 테마 1 저장</Text>
+                </Pressable>
+
+                <Pressable
+                  accessibilityRole="button"
+                  onPress={handleResetHomeTheme}
+                  style={({ pressed }) => [styles.goldOutlineButton, pressed && styles.buttonPressed]}
+                >
+                  <MaterialIcons name="restart-alt" size={24} color="#7A5300" />
+                  <Text style={styles.goldOutlineButtonText}>원상복구</Text>
+                </Pressable>
+              </View>
+            </View>
           </View>
-          <View style={styles.footerSummaryCard}>
-            <Text style={styles.footerSummaryLabel}>음성 스타일</Text>
-            <Text style={styles.footerSummaryValue}>{selectedStyleLabel}</Text>
+
+          <View style={styles.sectionCard}>
+            <Text style={styles.sectionTitle}>빠른 목적지</Text>
+            <Text style={styles.sectionDescription}>
+              자주 가는 장소를 직접 추가해 두면 이후 내비게이션 연결에 활용할 수 있습니다.
+            </Text>
+
+            <View style={styles.inputRow}>
+              <TextInput
+                value={pendingDestination}
+                onChangeText={setPendingDestination}
+                placeholder="예: 병원, 마트, 부모님 댁"
+                placeholderTextColor="#9ca3af"
+                style={styles.destinationInput}
+                returnKeyType="done"
+                onSubmitEditing={handleAddDestination}
+              />
+
+              <Pressable
+                accessibilityRole="button"
+                onPress={handleAddDestination}
+                style={({ pressed }) => [styles.addButton, pressed && styles.buttonPressed]}
+              >
+                <Text style={styles.addButtonText}>추가</Text>
+              </Pressable>
+            </View>
+
+            <View style={styles.destinationList}>
+              {quickDestinations.map((destination) => (
+                <View key={destination} style={styles.destinationChip}>
+                  <Text style={styles.destinationChipText}>{destination}</Text>
+                  <Pressable
+                    accessibilityRole="button"
+                    onPress={() => handleRemoveDestination(destination)}
+                    style={({ pressed }) => [styles.destinationRemoveButton, pressed && styles.buttonPressed]}
+                  >
+                    <MaterialIcons name="close" size={22} color="#11181c" />
+                  </Pressable>
+                </View>
+              ))}
+            </View>
           </View>
-          <View style={styles.footerSummaryCard}>
-            <Text style={styles.footerSummaryLabel}>테마 슬롯</Text>
-            <Text style={styles.footerSummaryValue}>{homeMasterSettings.savedThemeLabel}</Text>
-          </View>
-        </View>
+        </ScrollView>
+
+        <Pressable
+          accessibilityRole="button"
+          disabled={isSaving || isLoading}
+          onPress={handleSave}
+          style={({ pressed }) => [
+            styles.confirmButton,
+            (isSaving || isLoading) && styles.confirmButtonDisabled,
+            pressed && styles.buttonPressed,
+          ]}
+        >
+          <Text style={styles.confirmButtonText}>
+            {isSaving ? "저장 중..." : isLoading ? "불러오는 중..." : "확인"}
+          </Text>
+        </Pressable>
       </View>
-
-      <Modal transparent animationType="fade" visible={activeModal !== null} onRequestClose={closeModal}>
-        <View style={styles.modalBackdrop}>
-          <Pressable style={StyleSheet.absoluteFill} onPress={closeModal} />
-          <View style={styles.modalCard}>
-            <View style={styles.modalHeader}>
-              <View>
-                <Text style={styles.modalTitle}>{modalTitle}</Text>
-                <Text style={styles.modalSubtitle}>{modalSubtitle}</Text>
-              </View>
-              <Pressable
-                accessibilityRole="button"
-                onPress={closeModal}
-                style={({ pressed }) => [styles.modalCloseButton, pressed && styles.buttonPressed]}
-              >
-                <MaterialIcons name="close" size={22} color="#0f172a" />
-              </Pressable>
-            </View>
-
-            <ScrollView
-              showsVerticalScrollIndicator={false}
-              contentContainerStyle={styles.modalScrollContent}
-              keyboardShouldPersistTaps="handled"
-            >
-              {renderModalContent()}
-            </ScrollView>
-
-            <View style={styles.modalFooter}>
-              <Pressable
-                accessibilityRole="button"
-                onPress={closeModal}
-                style={({ pressed }) => [styles.modalConfirmButton, pressed && styles.buttonPressed]}
-              >
-                <Text style={styles.modalConfirmText}>확인</Text>
-              </Pressable>
-            </View>
-          </View>
-        </View>
-      </Modal>
     </ScreenContainer>
   );
 }
@@ -1253,497 +1267,196 @@ export default function SettingsScreen() {
 const styles = StyleSheet.create({
   screenContent: {
     flex: 1,
-    backgroundColor: "#d6dbe3",
+    paddingHorizontal: 18,
+    paddingTop: 12,
+    paddingBottom: 18,
+    backgroundColor: "#eef2f7",
   },
   root: {
     flex: 1,
-    paddingHorizontal: 18,
-    paddingTop: 10,
-    paddingBottom: 14,
-    gap: 14,
-  },
-  loadingState: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    paddingHorizontal: 28,
-    gap: 8,
-  },
-  loadingTitle: {
-    fontSize: 28,
-    lineHeight: 34,
-    fontWeight: "900",
-    color: "#0f172a",
-    textAlign: "center",
-  },
-  loadingDescription: {
-    fontSize: 16,
-    lineHeight: 22,
-    color: "#475569",
-    textAlign: "center",
   },
   headerRow: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    gap: 10,
+    marginBottom: 18,
   },
   backButton: {
-    minWidth: 82,
-    height: 44,
-    borderRadius: 18,
-    backgroundColor: "rgba(255,255,255,0.74)",
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.95)",
+    minWidth: 88,
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "center",
-    gap: 4,
+    gap: 6,
+    paddingVertical: 10,
+  },
+  buttonPressed: {
+    opacity: 0.72,
+    transform: [{ scale: 0.98 }],
   },
   backText: {
-    fontSize: 15,
-    fontWeight: "800",
-    color: "#0f172a",
-  },
-  headerTitleWrap: {
-    flex: 1,
-    alignItems: "center",
-  },
-  headerEyebrow: {
-    fontSize: 11,
-    lineHeight: 14,
-    fontWeight: "800",
-    color: "#64748b",
-    letterSpacing: 0.8,
-    textTransform: "uppercase",
+    fontSize: 24,
+    fontWeight: "bold",
+    color: "#11181c",
   },
   headerTitle: {
     fontSize: 28,
-    lineHeight: 32,
-    fontWeight: "900",
-    color: "#0f172a",
-    letterSpacing: -0.8,
+    fontWeight: "bold",
+    color: "#11181c",
   },
-  headerSaveButton: {
-    minWidth: 82,
-    height: 44,
-    borderRadius: 18,
+  headerSpacer: {
+    width: 88,
+  },
+  scrollContent: {
+    gap: 14,
+    paddingBottom: 18,
+  },
+  summaryCard: {
+    borderRadius: 28,
     backgroundColor: "#111827",
-    alignItems: "center",
-    justifyContent: "center",
-    paddingHorizontal: 14,
+    paddingHorizontal: 22,
+    paddingVertical: 24,
+    gap: 10,
   },
-  headerSaveButtonDisabled: {
-    opacity: 0.7,
-  },
-  headerSaveText: {
-    fontSize: 15,
-    fontWeight: "900",
-    color: "#f8fafc",
-  },
-  heroCard: {
-    borderRadius: 28,
-    paddingHorizontal: 18,
-    paddingVertical: 16,
-    backgroundColor: "rgba(255,255,255,0.72)",
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.92)",
-    gap: 14,
-  },
-  heroCopy: {
-    gap: 6,
-  },
-  heroTitle: {
+  summaryTitle: {
     fontSize: 24,
+    fontWeight: "bold",
+    color: "#d1d5db",
+  },
+  summaryValue: {
+    fontSize: 34,
+    fontWeight: "bold",
+    color: "#ffffff",
+  },
+  summaryDescription: {
+    fontSize: 20,
+    fontWeight: "600",
     lineHeight: 28,
-    fontWeight: "900",
-    color: "#0f172a",
-    letterSpacing: -0.6,
+    color: "#d1d5db",
   },
-  heroDescription: {
-    fontSize: 14,
-    lineHeight: 20,
-    color: "#475569",
-  },
-  heroPillWrap: {
-    flexDirection: "row",
-    gap: 10,
-  },
-  heroPill: {
-    flex: 1,
-    borderRadius: 18,
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    backgroundColor: "rgba(226,232,240,0.86)",
-    gap: 2,
-  },
-  heroPillLabel: {
-    fontSize: 11,
-    lineHeight: 14,
-    fontWeight: "800",
-    color: "#64748b",
-  },
-  heroPillValue: {
-    fontSize: 15,
-    lineHeight: 19,
-    fontWeight: "900",
-    color: "#0f172a",
-  },
-  gridWrap: {
-    flex: 1,
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 12,
-    alignContent: "flex-start",
-  },
-  gridCard: {
-    width: "31.4%",
-    minHeight: 140,
+  sectionCard: {
     borderRadius: 26,
-    paddingHorizontal: 12,
-    paddingVertical: 16,
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 10,
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.95)",
-  },
-  gridIconCircle: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: "rgba(255,255,255,0.72)",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  gridCardTitle: {
-    fontSize: 17,
-    lineHeight: 22,
-    fontWeight: "900",
-    color: "#0f172a",
-    textAlign: "center",
-    letterSpacing: -0.4,
-  },
-  gridCardSubtitle: {
-    fontSize: 12,
-    lineHeight: 16,
-    color: "#475569",
-    textAlign: "center",
-  },
-  footerRow: {
-    flexDirection: "row",
-    gap: 10,
-  },
-  footerSummaryCard: {
-    flex: 1,
-    borderRadius: 20,
-    backgroundColor: "rgba(255,255,255,0.64)",
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.92)",
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    gap: 2,
-  },
-  footerSummaryLabel: {
-    fontSize: 11,
-    lineHeight: 14,
-    fontWeight: "800",
-    color: "#64748b",
-  },
-  footerSummaryValue: {
-    fontSize: 14,
-    lineHeight: 18,
-    fontWeight: "900",
-    color: "#0f172a",
-  },
-  modalBackdrop: {
-    flex: 1,
-    backgroundColor: "rgba(15, 23, 42, 0.24)",
-    alignItems: "center",
-    justifyContent: "center",
-    paddingHorizontal: 16,
-    paddingVertical: 26,
-  },
-  modalCard: {
-    width: "100%",
-    maxWidth: 430,
-    maxHeight: "90%",
-    borderRadius: 30,
+    borderColor: "#e5e7eb",
     backgroundColor: "#f8fafc",
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.96)",
-    overflow: "hidden",
-  },
-  modalHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
     paddingHorizontal: 18,
-    paddingTop: 18,
-    paddingBottom: 14,
-    borderBottomWidth: 1,
-    borderBottomColor: "#e2e8f0",
-  },
-  modalTitle: {
-    fontSize: 26,
-    lineHeight: 30,
-    fontWeight: "900",
-    color: "#0f172a",
-  },
-  modalSubtitle: {
-    fontSize: 14,
-    lineHeight: 18,
-    color: "#64748b",
-  },
-  modalCloseButton: {
-    width: 42,
-    height: 42,
-    borderRadius: 21,
-    backgroundColor: "#e2e8f0",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  modalScrollContent: {
-    paddingHorizontal: 16,
-    paddingVertical: 16,
-    gap: 14,
-  },
-  modalSectionStack: {
-    gap: 14,
-  },
-  modalInlineCard: {
-    borderRadius: 24,
-    backgroundColor: "#ffffff",
-    borderWidth: 1,
-    borderColor: "#e2e8f0",
-    paddingHorizontal: 14,
-    paddingVertical: 14,
+    paddingVertical: 18,
     gap: 12,
   },
-  modalInlineHeader: {
+  sectionHeaderRow: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
     gap: 12,
   },
-  modalInlineTitle: {
-    fontSize: 18,
-    lineHeight: 22,
-    fontWeight: "900",
-    color: "#0f172a",
+  sectionTitle: {
+    fontSize: 24,
+    fontWeight: "bold",
+    color: "#11181c",
+    flex: 1,
   },
-  modalInlineDescription: {
-    marginTop: 4,
-    fontSize: 13,
-    lineHeight: 18,
-    color: "#64748b",
-    maxWidth: 260,
+  sectionDescription: {
+    fontSize: 20,
+    fontWeight: "600",
+    lineHeight: 28,
+    color: "#4b5563",
   },
-  groupTitle: {
-    fontSize: 18,
-    lineHeight: 22,
-    fontWeight: "900",
-    color: "#0f172a",
-  },
-  groupHelper: {
-    marginTop: -4,
-    fontSize: 13,
-    lineHeight: 18,
-    color: "#64748b",
-  },
-  optionWrap: {
+  optionList: {
     gap: 10,
   },
-  optionChip: {
-    borderRadius: 20,
+  providerOption: {
+    borderRadius: 22,
     borderWidth: 1,
-    borderColor: "#cbd5e1",
-    backgroundColor: "#f8fafc",
-    paddingHorizontal: 14,
-    paddingVertical: 12,
+    borderColor: "#d1d5db",
+    backgroundColor: "#ffffff",
+    paddingHorizontal: 16,
+    paddingVertical: 16,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+  },
+  providerOptionSelected: {
+    borderColor: "#111827",
+    backgroundColor: "#111827",
+  },
+  providerTextGroup: {
+    flex: 1,
+    gap: 4,
+  },
+  providerTitle: {
+    fontSize: 24,
+    fontWeight: "bold",
+    color: "#11181c",
+  },
+  providerTitleSelected: {
+    color: "#ffffff",
+  },
+  providerDescription: {
+    fontSize: 18,
+    fontWeight: "600",
+    color: "#6b7280",
+  },
+  providerDescriptionSelected: {
+    color: "#d1d5db",
+  },
+  arrowOption: {
+    borderRadius: 22,
+    borderWidth: 1,
+    borderColor: "#d1d5db",
+    backgroundColor: "#ffffff",
+    paddingHorizontal: 16,
+    paddingVertical: 16,
     gap: 6,
   },
-  optionChipSelected: {
-    borderColor: "#0f172a",
-    backgroundColor: "#e2e8f0",
+  arrowOptionSelected: {
+    borderColor: "#111827",
+    backgroundColor: "#e5f0ff",
   },
-  optionChipHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
+  arrowOptionTitle: {
+    fontSize: 24,
+    fontWeight: "bold",
+    color: "#11181c",
   },
-  optionChipTitle: {
-    fontSize: 16,
-    lineHeight: 20,
-    fontWeight: "900",
-    color: "#0f172a",
+  arrowOptionTitleSelected: {
+    color: "#111827",
   },
-  optionChipTitleSelected: {
-    color: "#020617",
+  arrowOptionDescription: {
+    fontSize: 18,
+    fontWeight: "600",
+    color: "#6b7280",
   },
-  optionChipDescription: {
-    fontSize: 13,
-    lineHeight: 18,
-    color: "#64748b",
-  },
-  optionChipDescriptionSelected: {
+  arrowOptionDescriptionSelected: {
     color: "#334155",
   },
-  selectorRow: {
+  inputRow: {
     flexDirection: "row",
-    gap: 8,
-    flexWrap: "wrap",
-  },
-  selectorButton: {
-    flex: 1,
-    minWidth: 88,
-    borderRadius: 16,
-    backgroundColor: "#e2e8f0",
-    paddingVertical: 11,
-    paddingHorizontal: 10,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  selectorButtonSelected: {
-    backgroundColor: "#111827",
-  },
-  selectorButtonText: {
-    fontSize: 14,
-    lineHeight: 18,
-    fontWeight: "900",
-    color: "#0f172a",
-  },
-  selectorButtonTextSelected: {
-    color: "#f8fafc",
-  },
-  directionPadRow: {
-    alignItems: "center",
-  },
-  directionPadMiddleRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 26,
-  },
-  padButton: {
-    width: 58,
-    height: 58,
-    borderRadius: 20,
-    backgroundColor: "#e2e8f0",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  previewFrame: {
-    height: HOME_PREVIEW_HEIGHT,
-    borderRadius: 24,
-    borderWidth: 1,
-    borderColor: "#d6dbe3",
-    overflow: "hidden",
-    position: "relative",
-  },
-  previewGhostCard: {
-    position: "absolute",
-    borderRadius: 18,
-    opacity: 0.2,
-  },
-  previewSignalGhost: {
-    left: 16,
-    top: 12,
-    width: HOME_PREVIEW_WIDTH - 32,
-    height: 112,
-  },
-  previewSpeedGhost: {
-    left: 22,
-    top: 142,
-    width: HOME_PREVIEW_WIDTH - 44,
-    height: 58,
-  },
-  previewDirectionGhost: {
-    left: 18,
-    top: 214,
-    width: HOME_PREVIEW_WIDTH - 36,
-    height: 92,
-  },
-  previewCard: {
-    position: "absolute",
-    borderRadius: 18,
-    alignItems: "center",
-    justifyContent: "center",
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.9)",
-  },
-  previewCardSelected: {
-    borderColor: "#0f172a",
-    borderWidth: 1.5,
-  },
-  previewSignalCard: {
-    width: HOME_PREVIEW_WIDTH - 36,
-    height: 106,
-  },
-  previewSignalText: {
-    fontSize: 34,
-    lineHeight: 40,
-    color: "#ffffff",
-    textShadowColor: "rgba(15,23,42,0.2)",
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 2,
-  },
-  previewSpeedCard: {
-    width: HOME_PREVIEW_WIDTH - 54,
-    height: 56,
-    gap: 2,
-  },
-  previewSpeedLabel: {
-    fontSize: 12,
-    lineHeight: 16,
-    color: "#475569",
-  },
-  previewSpeedValue: {
-    fontSize: 22,
-    lineHeight: 26,
-    color: "#0f172a",
-  },
-  previewDirectionCard: {
-    width: HOME_PREVIEW_WIDTH - 40,
-    height: 96,
-    gap: 2,
-  },
-  previewDirectionText: {
-    fontSize: 24,
-    lineHeight: 28,
-    color: "#0f172a",
-  },
-  destinationInputRow: {
-    flexDirection: "row",
+    alignItems: "stretch",
     gap: 10,
-    alignItems: "center",
   },
   destinationInput: {
     flex: 1,
-    minHeight: 48,
-    borderRadius: 18,
+    minHeight: 62,
+    borderRadius: 20,
     borderWidth: 1,
-    borderColor: "#cbd5e1",
-    backgroundColor: "#f8fafc",
-    paddingHorizontal: 14,
-    fontSize: 16,
-    color: "#0f172a",
+    borderColor: "#d1d5db",
+    backgroundColor: "#ffffff",
+    paddingHorizontal: 16,
+    fontSize: 22,
+    fontWeight: "600",
+    color: "#11181c",
   },
-  destinationAddButton: {
-    minWidth: 72,
-    height: 48,
-    borderRadius: 18,
+  addButton: {
+    minWidth: 96,
+    borderRadius: 20,
     backgroundColor: "#111827",
     alignItems: "center",
     justifyContent: "center",
-    paddingHorizontal: 14,
+    paddingHorizontal: 16,
   },
-  destinationAddButtonText: {
-    fontSize: 15,
-    fontWeight: "900",
-    color: "#f8fafc",
+  addButtonText: {
+    fontSize: 22,
+    fontWeight: "bold",
+    color: "#ffffff",
   },
-  destinationWrap: {
+  destinationList: {
     flexDirection: "row",
     flexWrap: "wrap",
     gap: 10,
@@ -1751,172 +1464,392 @@ const styles = StyleSheet.create({
   destinationChip: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 6,
-    borderRadius: 18,
+    borderRadius: 999,
+    backgroundColor: "#e5e7eb",
+    paddingLeft: 16,
+    paddingRight: 10,
     paddingVertical: 10,
-    paddingHorizontal: 12,
-    backgroundColor: "#eef2ff",
-    borderWidth: 1,
-    borderColor: "#c7d2fe",
+    gap: 8,
   },
   destinationChipText: {
-    fontSize: 14,
-    lineHeight: 18,
-    fontWeight: "800",
-    color: "#1e293b",
+    fontSize: 20,
+    fontWeight: "bold",
+    color: "#11181c",
   },
   destinationRemoveButton: {
-    width: 22,
-    height: 22,
-    borderRadius: 11,
-    backgroundColor: "rgba(255,255,255,0.8)",
+    width: 28,
+    height: 28,
+    borderRadius: 14,
     alignItems: "center",
     justifyContent: "center",
+    backgroundColor: "#ffffff",
   },
-  modalActionRow: {
-    flexDirection: "row",
-    gap: 10,
-  },
-  secondaryActionButton: {
-    flex: 1,
-    minHeight: 52,
-    borderRadius: 20,
-    backgroundColor: "#e2e8f0",
-    borderWidth: 1,
-    borderColor: "#cbd5e1",
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 8,
-  },
-  secondaryActionText: {
-    fontSize: 15,
-    fontWeight: "900",
-    color: "#0f172a",
-  },
-  goldActionButton: {
-    flex: 1,
-    minHeight: 52,
-    borderRadius: 20,
-    backgroundColor: "#f7d676",
-    borderWidth: 1,
-    borderColor: "#e3b93c",
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 8,
-  },
-  goldActionText: {
-    fontSize: 15,
-    fontWeight: "900",
-    color: "#5b4100",
-  },
-  modalFooter: {
-    paddingHorizontal: 16,
-    paddingTop: 12,
-    paddingBottom: 16,
-    borderTopWidth: 1,
-    borderTopColor: "#e2e8f0",
-  },
-  modalConfirmButton: {
-    minHeight: 56,
-    borderRadius: 22,
+  confirmButton: {
+    marginTop: 12,
+    borderRadius: 24,
     backgroundColor: "#111827",
     alignItems: "center",
     justifyContent: "center",
+    paddingVertical: 18,
   },
-  modalConfirmText: {
-    fontSize: 18,
-    lineHeight: 22,
+  confirmButtonDisabled: {
+    backgroundColor: "#9ca3af",
+  },
+  confirmButtonText: {
+    fontSize: 24,
+    fontWeight: "bold",
+    color: "#ffffff",
+  },
+  masterCenterCard: {
+    borderRadius: 30,
+    paddingHorizontal: 18,
+    paddingVertical: 20,
+    gap: 16,
+    backgroundColor: "#111827",
+    borderWidth: 1,
+    borderColor: "#202938",
+  },
+  masterCenterHeader: {
+    gap: 8,
+  },
+  masterCenterEyebrow: {
+    fontSize: 16,
     fontWeight: "900",
-    color: "#f8fafc",
+    color: "#d4af37",
+    letterSpacing: 0.4,
+  },
+  masterCenterTitle: {
+    fontSize: 30,
+    fontWeight: "900",
+    color: "#ffffff",
+  },
+  masterCenterDescription: {
+    fontSize: 19,
+    lineHeight: 27,
+    fontWeight: "600",
+    color: "#d1d5db",
+  },
+  masterSummaryRow: {
+    gap: 10,
+  },
+  masterSummaryPill: {
+    borderRadius: 18,
+    backgroundColor: "#1d2635",
+    borderWidth: 1,
+    borderColor: "#2c3749",
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    gap: 4,
+  },
+  masterSummaryLabel: {
+    fontSize: 15,
+    fontWeight: "800",
+    color: "#98a2b3",
+  },
+  masterSummaryValue: {
+    fontSize: 22,
+    fontWeight: "900",
+    color: "#ffffff",
+  },
+  masterPreviewWrap: {
+    alignItems: "center",
+  },
+  homePreviewBoard: {
+    borderRadius: 28,
+    borderWidth: 1.4,
+    borderColor: "rgba(255,255,255,0.8)",
+    overflow: "hidden",
+    position: "relative",
+  },
+  homePreviewCaption: {
+    position: "absolute",
+    top: 10,
+    right: 12,
+    zIndex: 10,
+    fontSize: 14,
+    fontWeight: "900",
+    color: "#4b5563",
+  },
+  previewCardShell: {
+    borderRadius: 20,
+    padding: 2,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.65)",
+  },
+  previewBlockSelected: {
+    borderRadius: 22,
+    borderWidth: 2,
+    borderStyle: "dashed",
+    borderColor: "#d4af37",
+  },
+  previewSignalBlock: {
+    position: "absolute",
+  },
+  previewSignalInner: {
+    minHeight: 124,
+    borderRadius: 18,
+    backgroundColor: "#C41230",
+    alignItems: "center",
+    justifyContent: "flex-start",
+    paddingTop: 16,
+    paddingBottom: 14,
+  },
+  previewSignalTitle: {
+    color: "#FDFDFD",
+    textAlign: "center",
+  },
+  previewSignalDistance: {
+    marginTop: 20,
+    color: "#111111",
+    textAlign: "center",
+    letterSpacing: -1.4,
+  },
+  previewSpeedBlock: {
+    position: "absolute",
+  },
+  previewSpeedInner: {
+    minHeight: 64,
+    borderRadius: 18,
+    backgroundColor: "#D7DCE3",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 10,
+  },
+  previewSpeedLabel: {
+    fontSize: 14,
+    lineHeight: 17,
+    color: "#6B7280",
+    textAlign: "center",
+  },
+  previewSpeedValue: {
+    marginTop: 4,
+    color: "#1F2937",
+    textAlign: "center",
+  },
+  previewDirectionBlock: {
+    position: "absolute",
+  },
+  previewDirectionInner: {
+    minHeight: 70,
+    borderRadius: 18,
+    backgroundColor: "#D7DCE3",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingTop: 0,
+    paddingBottom: 4,
+  },
+  previewDirectionArrow: {
+    color: "#DCE2EA",
+    textAlign: "center",
+    marginBottom: -14,
+    transform: [{ scaleX: 1.2 }, { scaleY: 1.08 }],
+  },
+  previewDirectionLabel: {
+    color: "#27303B",
+    textAlign: "center",
+  },
+  masterSectionCard: {
+    borderRadius: 24,
+    paddingHorizontal: 16,
+    paddingVertical: 16,
+    backgroundColor: "#f8fafc",
+    gap: 12,
+  },
+  masterSectionTitle: {
+    fontSize: 24,
+    fontWeight: "900",
+    color: "#11181c",
   },
   sliderCard: {
-    borderRadius: 24,
-    borderWidth: 1,
-    borderColor: "#e2e8f0",
+    borderRadius: 22,
     backgroundColor: "#ffffff",
+    borderWidth: 1,
+    borderColor: "#d8dee7",
     paddingHorizontal: 14,
     paddingVertical: 14,
     gap: 12,
   },
   sliderHeaderRow: {
     flexDirection: "row",
-    alignItems: "flex-start",
-    justifyContent: "space-between",
     gap: 10,
+    alignItems: "flex-start",
   },
   sliderTextGroup: {
     flex: 1,
     gap: 4,
   },
   sliderTitle: {
-    fontSize: 17,
-    lineHeight: 21,
+    fontSize: 22,
     fontWeight: "900",
-    color: "#0f172a",
+    color: "#11181c",
   },
   sliderDescription: {
-    fontSize: 13,
-    lineHeight: 18,
-    color: "#64748b",
+    fontSize: 17,
+    lineHeight: 24,
+    fontWeight: "600",
+    color: "#6b7280",
   },
   sliderValueBadge: {
-    minWidth: 72,
-    borderRadius: 16,
-    paddingVertical: 8,
-    paddingHorizontal: 10,
-    backgroundColor: "#e2e8f0",
+    minWidth: 84,
+    borderRadius: 14,
+    backgroundColor: "#eef2f7",
     alignItems: "center",
     justifyContent: "center",
+    paddingHorizontal: 10,
+    paddingVertical: 10,
   },
   sliderValueBadgeText: {
-    fontSize: 14,
-    lineHeight: 18,
+    fontSize: 18,
     fontWeight: "900",
-    color: "#0f172a",
+    color: "#11181c",
   },
   sliderControlRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 12,
+    gap: 10,
   },
   sliderStepButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: "#e2e8f0",
+    width: 42,
+    height: 42,
+    borderRadius: 21,
     alignItems: "center",
     justifyContent: "center",
+    backgroundColor: "#eef2f7",
+    borderWidth: 1,
+    borderColor: "#d1d5db",
   },
   sliderTrack: {
     flex: 1,
-    minHeight: 40,
+    height: 38,
     justifyContent: "center",
   },
   sliderTrackBase: {
-    height: 10,
+    height: 8,
     borderRadius: 999,
-    backgroundColor: "#d7dee7",
+    backgroundColor: "#d7dde6",
   },
   sliderTrackFill: {
     position: "absolute",
     left: 0,
-    height: 10,
+    height: 8,
     borderRadius: 999,
   },
   sliderThumb: {
     position: "absolute",
+    top: 4,
     width: 24,
     height: 24,
-    borderRadius: 12,
     marginLeft: -12,
+    borderRadius: 12,
     backgroundColor: "#ffffff",
     borderWidth: 3,
-    top: 8,
   },
-  buttonPressed: {
-    opacity: 0.82,
-    transform: [{ scale: 0.985 }],
+  selectionWrap: {
+    gap: 10,
+  },
+  selectionLabel: {
+    fontSize: 20,
+    fontWeight: "900",
+    color: "#11181c",
+  },
+  elementChipRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+  },
+  elementChip: {
+    borderRadius: 999,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    backgroundColor: "#ffffff",
+    borderWidth: 1,
+    borderColor: "#d1d5db",
+  },
+  elementChipSelected: {
+    backgroundColor: "#111827",
+    borderColor: "#111827",
+  },
+  elementChipText: {
+    fontSize: 18,
+    fontWeight: "800",
+    color: "#11181c",
+  },
+  elementChipTextSelected: {
+    color: "#ffffff",
+  },
+  nudgeGrid: {
+    alignSelf: "center",
+    width: 216,
+    flexDirection: "row",
+    flexWrap: "wrap",
+    justifyContent: "center",
+    gap: 10,
+  },
+  nudgeButton: {
+    width: 58,
+    height: 58,
+    borderRadius: 18,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#ffffff",
+    borderWidth: 1,
+    borderColor: "#d1d5db",
+  },
+  nudgeCenter: {
+    width: 58,
+    height: 58,
+    borderRadius: 18,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#111827",
+    paddingHorizontal: 6,
+  },
+  nudgeCenterText: {
+    fontSize: 12,
+    lineHeight: 16,
+    fontWeight: "900",
+    color: "#ffffff",
+    textAlign: "center",
+  },
+  nudgeSpacer: {
+    width: 58,
+    height: 58,
+  },
+  masterActionRow: {
+    gap: 10,
+  },
+  goldActionButton: {
+    minHeight: 58,
+    borderRadius: 20,
+    backgroundColor: "#D4AF37",
+    borderWidth: 1,
+    borderColor: "#F8DE84",
+    alignItems: "center",
+    justifyContent: "center",
+    flexDirection: "row",
+    gap: 8,
+    paddingHorizontal: 16,
+  },
+  goldActionButtonText: {
+    fontSize: 21,
+    fontWeight: "900",
+    color: "#3F2A00",
+  },
+  goldOutlineButton: {
+    minHeight: 58,
+    borderRadius: 20,
+    backgroundColor: "#F6E4A3",
+    borderWidth: 1,
+    borderColor: "#E0BD54",
+    alignItems: "center",
+    justifyContent: "center",
+    flexDirection: "row",
+    gap: 8,
+    paddingHorizontal: 16,
+  },
+  goldOutlineButtonText: {
+    fontSize: 21,
+    fontWeight: "900",
+    color: "#7A5300",
   },
 });
