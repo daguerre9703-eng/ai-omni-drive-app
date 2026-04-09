@@ -37,6 +37,9 @@ describe("home hud layout regression", () => {
     expect(homeSource).toContain('현재 속도');
     expect(homeSource).toContain('speedOnlyColumn');
     expect(homeSource).toContain('speedOnlyValue');
+    expect(homeSource).toContain('minHeight: 86');
+    expect(homeSource).toContain('paddingVertical: 8');
+    expect(homeSource).toContain('gap: 4');
     expect(homeSource).toContain(': "0 km/h";');
     expect(homeSource).not.toContain('metricDivider');
     expect(homeSource).not.toContain('남은 거리');

@@ -628,8 +628,8 @@ const styles = StyleSheet.create({
   },
   mainStack: {
     flex: 1,
-    gap: 12,
-    paddingTop: 8,
+    gap: 14,
+    paddingTop: 10,
     paddingBottom: 20,
   },
   cardShell: {
@@ -645,10 +645,10 @@ const styles = StyleSheet.create({
     elevation: 0,
   },
   signalShell: {
-    flex: 0.62,
+    flex: 0.6,
   },
   infoShell: {
-    flex: 0.22,
+    flex: 0.3,
   },
   pressedCardShell: {
     opacity: 0.94,
@@ -690,25 +690,27 @@ const styles = StyleSheet.create({
   },
   infoCard: {
     flex: 1,
-    minHeight: 68,
+    minHeight: 86,
     borderRadius: 20,
     backgroundColor: "#D0D3D9",
     borderWidth: 1,
     borderColor: "#ECEEF2",
     alignItems: "center",
     justifyContent: "center",
+    paddingVertical: 8,
   },
   speedOnlyColumn: {
     flex: 1,
     width: "100%",
     alignItems: "center",
     justifyContent: "center",
+    gap: 4,
     paddingHorizontal: 10,
-    paddingVertical: 0,
+    paddingVertical: 6,
   },
   metricLabel: {
     fontSize: 13,
-    lineHeight: 15,
+    lineHeight: 16,
     fontWeight: "800",
     color: "#646C79",
     textAlign: "center",
@@ -722,16 +724,16 @@ const styles = StyleSheet.create({
     textAlign: "center",
   },
   speedOnlyValue: {
-    marginTop: 1,
-    fontSize: 33,
-    lineHeight: 37,
+    marginTop: 0,
+    fontSize: 32,
+    lineHeight: 36,
     fontWeight: "900",
     color: "#1C2430",
     textAlign: "center",
-    letterSpacing: -1.2,
+    letterSpacing: -1,
   },
   directionShell: {
-    flex: 3.42,
+    flex: 3.28,
   },
   directionCard: {
     flex: 1,
