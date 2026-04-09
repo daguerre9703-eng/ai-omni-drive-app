@@ -12,6 +12,7 @@ export type VoiceAlertSettings = {
 
 export type VoiceAlertContext = {
   distanceMeters?: number;
+  supplementalText?: string;
 };
 
 export const DEFAULT_VOICE_ALERT_SETTINGS: VoiceAlertSettings = {
@@ -71,20 +72,33 @@ export function buildVoiceAlertText(
   context: VoiceAlertContext = {},
 ) {
   const roundedDistance = Math.max(0, Math.round(context.distanceMeters ?? 0));
+  const supplementalText = context.supplementalText?.trim();
+
+  const appendSupplementalText = (baseText: string) => {
+    if (!supplementalText) {
+      return baseText.trim();
+    }
+
+    return `${baseText.trim()} ${supplementalText}`.trim();
+  };
 
   if (settings.length === "detailed") {
     if (event === "red_signal_ahead") {
-      return `전방 ${roundedDistance}미터 적색 신호입니다. 안전 운행하세요.${STYLE_SUFFIX[settings.style]}`.trim();
+      return appendSupplementalText(
+        `전방 ${roundedDistance}미터 적색 신호입니다. 안전 운행하세요.${STYLE_SUFFIX[settings.style]}`,
+      );
     }
 
-    return "신호가 변경되었습니다. 출발하세요.";
+    return appendSupplementalText("신호가 변경되었습니다. 출발하세요.");
   }
 
   if (event === "red_signal_ahead") {
-    return `전방 빨간불.${settings.style === "urgent" ? " 바로 감속." : ""}`.trim();
+    return appendSupplementalText(`전방 빨간불.${settings.style === "urgent" ? " 바로 감속." : ""}`);
   }
 
-  return settings.style === "calm" ? "녹색불입니다. 천천히 출발." : "녹색불입니다. 출발.";
+  return appendSupplementalText(
+    settings.style === "calm" ? "녹색불입니다. 천천히 출발." : "녹색불입니다. 출발.",
+  );
 }
 
 export function getSpeechOptions(style: VoiceAlertStyle): Speech.SpeechOptions {

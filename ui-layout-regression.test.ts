@@ -34,7 +34,7 @@ describe("home hud layout regression", () => {
     expect(homeSource).toContain('speedOnlyColumn');
     expect(homeSource).toContain('speedOnlyValue');
     expect(homeSource).toContain('signalDistanceLabel: "128m"');
-    expect(homeSource).toContain('fallbackSpeedLabel: "18 km/h"');
+    expect(homeSource).toContain('Math.round(lastSpeedKmh)');
     expect(homeSource).not.toContain('metricDivider');
     expect(homeSource).not.toContain('남은 거리');
     expect(homeSource).not.toContain('11개국어 스캔');
@@ -67,8 +67,11 @@ describe("home hud layout regression", () => {
   it("strengthens the ruby red full-screen warning blink for stop state", () => {
     expect(homeSource).toContain('const [redAlertVisible, setRedAlertVisible] = useState(false);');
     expect(homeSource).toContain('backgroundColor: "#C41230"');
+    expect(homeSource).toContain('redAlertIntensity === "soft" ? 420 : redAlertIntensity === "strong" ? 170 : 260');
     expect(homeSource).toContain('setRedAlertVisible((prev) => !prev);');
-    expect(homeSource).toContain('}, 260);');
+    expect(homeSource).toContain('return redAlertVisible ? 0.42 : 0.08;');
+    expect(homeSource).toContain('return redAlertVisible ? 0.68 : 0.14;');
+    expect(homeSource).toContain('return redAlertVisible ? 0.18 : 0.03;');
     expect(homeSource).toContain('opacity: 0.54');
     expect(homeSource).toContain('opacity: 0.08');
   });

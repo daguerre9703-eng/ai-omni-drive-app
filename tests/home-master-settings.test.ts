@@ -93,6 +93,7 @@ describe("home master settings regression", () => {
     expect(homeSource).toContain("homeMasterSettings.sizes.speedValue");
     expect(homeSource).toContain("homeMasterSettings.sizes.directionArrow");
     expect(homeSource).toContain("dynamicSignalGlow");
-    expect(homeSource).toContain("getSignalGlowOpacity(0.54, homeMasterSettings.signalGlow.red)");
+    expect(homeSource).toContain("getSignalGlowOpacity(0.38, homeMasterSettings.signalGlow.red)");
+    expect(homeSource).toContain("getSignalGlowOpacity(redAlertOverlayOpacity, homeMasterSettings.signalGlow.red)");
   });
 });

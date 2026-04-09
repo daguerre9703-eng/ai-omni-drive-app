@@ -5,6 +5,9 @@ export type LeftTurnSignalState = "go" | "stop" | "unknown";
 export type PedestrianSignalState = "walk" | "stop" | "unknown";
 export type DetectionRange = "좁게" | "보통" | "넓게";
 export type ScanCadenceMode = "slow" | "normal" | "fast";
+export type RedAlertIntensity = "off" | "soft" | "balanced" | "strong";
+export type SignalPriorityMode = "pedestrian-first" | "vehicle-first" | "safety-first";
+export type SensitivityMode = "standard" | "night" | "rain" | "auto";
 
 export type TrafficSignalDetection = {
   state: TrafficSignalState;
@@ -16,9 +19,13 @@ export type TrafficSignalDetection = {
   lastAnalyzedAt: number;
   monitoringActive: boolean;
   summary: string;
+  prioritySummary: string;
   scanIntervalMs: number;
   lastSpeedKmh: number;
   cadenceMode: ScanCadenceMode;
+  redAlertIntensity: RedAlertIntensity;
+  priorityMode: SignalPriorityMode;
+  sensitivityMode: SensitivityMode;
 };
 
 export const TRAFFIC_SIGNAL_STORAGE_KEY = "ai-omni-drive:traffic-signal";
@@ -33,9 +40,13 @@ export const DEFAULT_TRAFFIC_SIGNAL_DETECTION: TrafficSignalDetection = {
   lastAnalyzedAt: 0,
   monitoringActive: false,
   summary: "신호 인식 대기",
+  prioritySummary: "우선순위 안내 대기",
   scanIntervalMs: 2200,
   lastSpeedKmh: 0,
   cadenceMode: "normal",
+  redAlertIntensity: "balanced",
+  priorityMode: "safety-first",
+  sensitivityMode: "standard",
 };
 
 const listeners = new Set<(value: TrafficSignalDetection) => void>();
@@ -74,6 +85,30 @@ function normalizeCadenceMode(value?: string | null): ScanCadenceMode {
   return DEFAULT_TRAFFIC_SIGNAL_DETECTION.cadenceMode;
 }
 
+function normalizeRedAlertIntensity(value?: string | null): RedAlertIntensity {
+  if (value === "off" || value === "soft" || value === "balanced" || value === "strong") {
+    return value;
+  }
+
+  return DEFAULT_TRAFFIC_SIGNAL_DETECTION.redAlertIntensity;
+}
+
+function normalizePriorityMode(value?: string | null): SignalPriorityMode {
+  if (value === "pedestrian-first" || value === "vehicle-first" || value === "safety-first") {
+    return value;
+  }
+
+  return DEFAULT_TRAFFIC_SIGNAL_DETECTION.priorityMode;
+}
+
+function normalizeSensitivityMode(value?: string | null): SensitivityMode {
+  if (value === "standard" || value === "night" || value === "rain" || value === "auto") {
+    return value;
+  }
+
+  return DEFAULT_TRAFFIC_SIGNAL_DETECTION.sensitivityMode;
+}
+
 function normalizeDetection(
   value?: Partial<TrafficSignalDetection> | null,
 ): TrafficSignalDetection {
@@ -99,6 +134,8 @@ function normalizeDetection(
         ? value.monitoringActive
         : DEFAULT_TRAFFIC_SIGNAL_DETECTION.monitoringActive,
     summary: value?.summary?.trim() || DEFAULT_TRAFFIC_SIGNAL_DETECTION.summary,
+    prioritySummary:
+      value?.prioritySummary?.trim() || DEFAULT_TRAFFIC_SIGNAL_DETECTION.prioritySummary,
     scanIntervalMs:
       typeof value?.scanIntervalMs === "number" && Number.isFinite(value.scanIntervalMs)
         ? Math.max(700, Math.round(value.scanIntervalMs))
@@ -108,6 +145,9 @@ function normalizeDetection(
         ? Math.max(0, Number(value.lastSpeedKmh.toFixed(1)))
         : DEFAULT_TRAFFIC_SIGNAL_DETECTION.lastSpeedKmh,
     cadenceMode: normalizeCadenceMode(value?.cadenceMode),
+    redAlertIntensity: normalizeRedAlertIntensity(value?.redAlertIntensity),
+    priorityMode: normalizePriorityMode(value?.priorityMode),
+    sensitivityMode: normalizeSensitivityMode(value?.sensitivityMode),
   };
 }
 

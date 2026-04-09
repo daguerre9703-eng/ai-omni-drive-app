@@ -23,7 +23,7 @@ describe("camera and settings controls regression", () => {
     expect(cameraSource).toContain("setLatestDetailText(");
     expect(cameraSource).toContain("result.leftTurnLabel");
     expect(cameraSource).toContain("result.pedestrianLabel");
-    expect(cameraSource).toContain("Math.round(speedRef.current)");
+    expect(cameraSource).toContain("Math.round(lastSpeedKmh)");
     expect(cameraSource).toContain("DEFAULT_VOICE_ALERT_SETTINGS");
     expect(cameraSource).toContain("resolveScanProfile");
     expect(cameraSource).toContain("intervalMs: 900");
@@ -107,10 +107,12 @@ describe("camera and settings controls regression", () => {
     expect(voiceSource).toContain('export type VoiceAlertLength = "detailed" | "brief";');
     expect(voiceSource).toContain('export type VoiceAlertStyle = "standard" | "calm" | "urgent";');
     expect(voiceSource).toContain("export function buildVoiceAlertText(");
-    expect(voiceSource).toContain('return `전방 ${roundedDistance}미터 적색 신호입니다. 안전 운행하세요.${STYLE_SUFFIX[settings.style]}`.trim();');
-    expect(voiceSource).toContain('return "신호가 변경되었습니다. 출발하세요.";');
-    expect(voiceSource).toContain('return `전방 빨간불.${settings.style === "urgent" ? " 바로 감속." : ""}`.trim();');
-    expect(voiceSource).toContain('return settings.style === "calm" ? "녹색불입니다. 천천히 출발." : "녹색불입니다. 출발.";');
+    expect(voiceSource).toContain("supplementalText?: string;");
+    expect(voiceSource).toContain("const appendSupplementalText = (baseText: string) => {");
+    expect(voiceSource).toContain('`전방 ${roundedDistance}미터 적색 신호입니다. 안전 운행하세요.${STYLE_SUFFIX[settings.style]}`');
+    expect(voiceSource).toContain('return appendSupplementalText("신호가 변경되었습니다. 출발하세요.");');
+    expect(voiceSource).toContain('return appendSupplementalText(`전방 빨간불.${settings.style === "urgent" ? " 바로 감속." : ""}`);');
+    expect(voiceSource).toContain('settings.style === "calm" ? "녹색불입니다. 천천히 출발." : "녹색불입니다. 출발."');
     expect(voiceSource).toContain("await Speech.stop();");
     expect(voiceSource).toContain("Speech.speak(text, getSpeechOptions(settings.style));");
   });

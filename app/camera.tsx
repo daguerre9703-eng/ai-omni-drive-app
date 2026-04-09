@@ -21,6 +21,9 @@ import {
   DEFAULT_TRAFFIC_SIGNAL_DETECTION,
   getTrafficSignalDetection,
   type DetectionRange,
+  type RedAlertIntensity,
+  type SensitivityMode,
+  type SignalPriorityMode,
   setTrafficSignalDetection,
 } from "@/lib/traffic-signal-store";
 import {
@@ -40,6 +43,9 @@ type CameraSettings = {
   adaptiveScanEnabled: boolean;
   hapticAlertsEnabled: boolean;
   lowVisionModeEnabled: boolean;
+  redAlertIntensity: RedAlertIntensity;
+  signalPriorityMode: SignalPriorityMode;
+  sensitivityMode: SensitivityMode;
 };
 
 type ScanProfile = {
@@ -53,6 +59,9 @@ const DEFAULT_CAMERA_SETTINGS: CameraSettings = {
   adaptiveScanEnabled: true,
   hapticAlertsEnabled: true,
   lowVisionModeEnabled: true,
+  redAlertIntensity: "balanced",
+  signalPriorityMode: "safety-first",
+  sensitivityMode: "standard",
 };
 
 const RANGE_OPTIONS: DetectionRangeOption[] = [
@@ -89,6 +98,26 @@ const RANGE_CROP: Record<DetectionRange, { widthRatio: number; heightRatio: numb
   좁게: { widthRatio: 0.28, heightRatio: 0.28 },
   보통: { widthRatio: 0.4, heightRatio: 0.34 },
   넓게: { widthRatio: 0.56, heightRatio: 0.4 },
+};
+
+const RED_ALERT_LABELS: Record<RedAlertIntensity, string> = {
+  off: "점멸 끔",
+  soft: "점멸 약함",
+  balanced: "점멸 균형",
+  strong: "점멸 강함",
+};
+
+const PRIORITY_LABELS: Record<SignalPriorityMode, string> = {
+  "pedestrian-first": "보행 우선",
+  "vehicle-first": "차량 우선",
+  "safety-first": "안전 우선",
+};
+
+const SENSITIVITY_LABELS: Record<SensitivityMode, string> = {
+  standard: "기본 감도",
+  night: "야간 고감도",
+  rain: "우천 고감도",
+  auto: "자동 적응",
 };
 
 function resolveScanProfile(speedKmh: number): ScanProfile {
@@ -169,7 +198,11 @@ export default function CameraScreen() {
       ? "아직 인식된 신호가 없습니다."
       : initialDetection.summary,
   );
-  const [latestDetailText, setLatestDetailText] = useState("좌회전·보행 신호 대기");
+  const [latestDetailText, setLatestDetailText] = useState(
+    initialDetection.prioritySummary === "우선순위 안내 대기"
+      ? "좌회전·보행 신호 대기"
+      : initialDetection.prioritySummary,
+  );
   const [cameraReady, setCameraReady] = useState(false);
   const [lastAnalyzedAt, setLastAnalyzedAt] = useState(initialDetection.lastAnalyzedAt);
   const [lastDetectedAt, setLastDetectedAt] = useState(initialDetection.detectedAt);
@@ -179,6 +212,15 @@ export default function CameraScreen() {
   const [adaptiveScanEnabled, setAdaptiveScanEnabled] = useState(DEFAULT_CAMERA_SETTINGS.adaptiveScanEnabled);
   const [hapticAlertsEnabled, setHapticAlertsEnabled] = useState(DEFAULT_CAMERA_SETTINGS.hapticAlertsEnabled);
   const [lowVisionModeEnabled, setLowVisionModeEnabled] = useState(DEFAULT_CAMERA_SETTINGS.lowVisionModeEnabled);
+  const [redAlertIntensity, setRedAlertIntensity] = useState<RedAlertIntensity>(
+    DEFAULT_CAMERA_SETTINGS.redAlertIntensity,
+  );
+  const [signalPriorityMode, setSignalPriorityMode] = useState<SignalPriorityMode>(
+    DEFAULT_CAMERA_SETTINGS.signalPriorityMode,
+  );
+  const [sensitivityMode, setSensitivityMode] = useState<SensitivityMode>(
+    DEFAULT_CAMERA_SETTINGS.sensitivityMode,
+  );
   const [permission, requestPermission] = useCameraPermissions();
 
   const cameraRef = useRef<CameraView | null>(null);
@@ -217,6 +259,9 @@ export default function CameraScreen() {
         setAdaptiveScanEnabled(parsed.adaptiveScanEnabled ?? DEFAULT_CAMERA_SETTINGS.adaptiveScanEnabled);
         setHapticAlertsEnabled(parsed.hapticAlertsEnabled ?? DEFAULT_CAMERA_SETTINGS.hapticAlertsEnabled);
         setLowVisionModeEnabled(parsed.lowVisionModeEnabled ?? DEFAULT_CAMERA_SETTINGS.lowVisionModeEnabled);
+        setRedAlertIntensity(parsed.redAlertIntensity ?? DEFAULT_CAMERA_SETTINGS.redAlertIntensity);
+        setSignalPriorityMode(parsed.signalPriorityMode ?? DEFAULT_CAMERA_SETTINGS.signalPriorityMode);
+        setSensitivityMode(parsed.sensitivityMode ?? DEFAULT_CAMERA_SETTINGS.sensitivityMode);
       } catch (error) {
         console.error("Failed to load camera settings", error);
       }
@@ -291,6 +336,8 @@ export default function CameraScreen() {
         const result = await detectSignal.mutateAsync({
           base64Image: photo.base64,
           detectionRange: selectedRange,
+          priorityMode: signalPriorityMode,
+          sensitivityMode,
           cropHint: crop,
         });
 
@@ -306,18 +353,20 @@ export default function CameraScreen() {
           lastAnalyzedAt: detectedAt,
           monitoringActive: monitoringActiveRef.current,
           summary: result.summary,
+          prioritySummary: result.prioritySummary,
           scanIntervalMs: scanIntervalRef.current,
           lastSpeedKmh: speedRef.current,
           cadenceMode: cadenceModeRef.current,
+          redAlertIntensity,
+          priorityMode: signalPriorityMode,
+          sensitivityMode,
         });
 
         setLastAnalyzedAt(detectedAt);
         setLastDetectedAt(detectedAt);
         setLatestResultText(`${result.displayLabel} · 신뢰도 ${Math.round(result.confidence * 100)}%`);
         setLatestDetailText(
-          `${result.leftTurnLabel} · ${result.pedestrianLabel} · ${Math.round(speedRef.current)} km/h · ${(
-            scanIntervalRef.current / 1000
-          ).toFixed(1)}초`,
+          `${result.prioritySummary} · ${result.leftTurnLabel} · ${result.pedestrianLabel}`,
         );
         setLiveStatusText(
           monitoringActiveRef.current
@@ -333,13 +382,17 @@ export default function CameraScreen() {
         lastPedestrianStateRef.current = result.pedestrianState;
 
         if (result.signalState !== previousState) {
+          const supplementalText = result.prioritySummary;
+
           if (result.signalState === "red") {
             await speakVoiceAlert("red_signal_ahead", DEFAULT_VOICE_ALERT_SETTINGS, {
               distanceMeters: 128,
+              supplementalText,
             });
           } else if (result.signalState === "green") {
             await speakVoiceAlert("green_signal_changed", DEFAULT_VOICE_ALERT_SETTINGS, {
               distanceMeters: 128,
+              supplementalText,
             });
           }
         }
@@ -364,9 +417,13 @@ export default function CameraScreen() {
           lastAnalyzedAt: analysisStartedAt,
           monitoringActive: monitoringActiveRef.current,
           summary: monitoringActiveRef.current ? "실시간 스캔 재시도 중" : "AI 인식 실패",
+          prioritySummary: `${PRIORITY_LABELS[signalPriorityMode]} 기준으로 재시도 중`,
           scanIntervalMs: scanIntervalRef.current,
           lastSpeedKmh: speedRef.current,
           cadenceMode: cadenceModeRef.current,
+          redAlertIntensity,
+          priorityMode: signalPriorityMode,
+          sensitivityMode,
         });
 
         if (trigger === "manual") {
@@ -379,7 +436,16 @@ export default function CameraScreen() {
         setIsAnalyzing(false);
       }
     },
-    [cameraReady, detectSignal, ensurePermission, hapticAlertsEnabled, selectedRange],
+    [
+      cameraReady,
+      detectSignal,
+      ensurePermission,
+      hapticAlertsEnabled,
+      redAlertIntensity,
+      selectedRange,
+      sensitivityMode,
+      signalPriorityMode,
+    ],
   );
 
   useEffect(() => {
@@ -389,6 +455,9 @@ export default function CameraScreen() {
       scanIntervalMs: scanIntervalRef.current,
       lastSpeedKmh: speedRef.current,
       cadenceMode: cadenceModeRef.current,
+      redAlertIntensity,
+      priorityMode: signalPriorityMode,
+      sensitivityMode,
     });
 
     if (!isMonitoring) {
@@ -401,7 +470,7 @@ export default function CameraScreen() {
     }
 
     setLiveStatusText(`${resolveScanProfile(speedRef.current).label} 준비 중`);
-  }, [isMonitoring]);
+  }, [isMonitoring, redAlertIntensity, sensitivityMode, signalPriorityMode]);
 
   useEffect(() => {
     if (!isMonitoring || !cameraReady || Platform.OS === "web" || !permission?.granted) {
@@ -582,6 +651,21 @@ export default function CameraScreen() {
                   저시력 모드 {lowVisionModeEnabled ? "ON" : "OFF"}
                 </Text>
               </View>
+              <View style={styles.featureBadge}>
+                <Text style={[styles.featureBadgeText, lowVisionModeEnabled && styles.featureBadgeTextLowVision]}>
+                  {RED_ALERT_LABELS[redAlertIntensity]}
+                </Text>
+              </View>
+              <View style={styles.featureBadge}>
+                <Text style={[styles.featureBadgeText, lowVisionModeEnabled && styles.featureBadgeTextLowVision]}>
+                  {PRIORITY_LABELS[signalPriorityMode]}
+                </Text>
+              </View>
+              <View style={styles.featureBadge}>
+                <Text style={[styles.featureBadgeText, lowVisionModeEnabled && styles.featureBadgeTextLowVision]}>
+                  {SENSITIVITY_LABELS[sensitivityMode]}
+                </Text>
+              </View>
             </View>
 
             <Text style={[styles.previewHint, lowVisionModeEnabled && styles.previewHintLowVision]}>
@@ -700,6 +784,9 @@ export default function CameraScreen() {
             </Text>
             <Text style={[styles.summarySubMeta, lowVisionModeEnabled && styles.summarySubMetaLowVision]}>
               {latestDetailText}
+            </Text>
+            <Text style={[styles.summarySubMeta, lowVisionModeEnabled && styles.summarySubMetaLowVision]}>
+              {PRIORITY_LABELS[signalPriorityMode]} · {SENSITIVITY_LABELS[sensitivityMode]} · {RED_ALERT_LABELS[redAlertIntensity]}
             </Text>
             <Text style={[styles.summarySubMeta, lowVisionModeEnabled && styles.summarySubMetaLowVision]}>
               {adaptiveScanEnabled ? "속도 적응 스캔" : "고정 주기 스캔"} · {Math.round(lastSpeedKmh)} km/h · {(scanIntervalMs / 1000).toFixed(1)}초 · {cadenceMode}

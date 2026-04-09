@@ -30,6 +30,9 @@ import {
   subscribeTrafficSignalDetection,
   type LeftTurnSignalState,
   type PedestrianSignalState,
+  type RedAlertIntensity,
+  type SensitivityMode,
+  type SignalPriorityMode,
   type TrafficSignalState,
 } from "@/lib/traffic-signal-store";
 
@@ -49,6 +52,9 @@ type AppSettings = {
   adaptiveScanEnabled: boolean;
   hapticAlertsEnabled: boolean;
   lowVisionModeEnabled: boolean;
+  redAlertIntensity: RedAlertIntensity;
+  signalPriorityMode: SignalPriorityMode;
+  sensitivityMode: SensitivityMode;
 };
 
 type RoutePoint = {
@@ -74,6 +80,9 @@ const DEFAULT_SETTINGS: AppSettings = {
   adaptiveScanEnabled: true,
   hapticAlertsEnabled: true,
   lowVisionModeEnabled: true,
+  redAlertIntensity: "balanced",
+  signalPriorityMode: "safety-first",
+  sensitivityMode: "standard",
 };
 
 const PROVIDER_LABEL: Record<NavigationProvider, string> = {
@@ -86,6 +95,26 @@ const ARROW_FONT_SIZE: Record<ArrowSize, number> = {
   large: 88,
   xlarge: 102,
   huge: 122,
+};
+
+const RED_ALERT_LABEL: Record<RedAlertIntensity, string> = {
+  off: "점멸 끔",
+  soft: "점멸 약함",
+  balanced: "점멸 균형",
+  strong: "점멸 강함",
+};
+
+const PRIORITY_MODE_LABEL: Record<SignalPriorityMode, string> = {
+  "pedestrian-first": "보행 우선",
+  "vehicle-first": "차량 우선",
+  "safety-first": "안전 우선",
+};
+
+const SENSITIVITY_MODE_LABEL: Record<SensitivityMode, string> = {
+  standard: "기본 감도",
+  night: "야간 고감도",
+  rain: "우천 고감도",
+  auto: "자동 적응",
 };
 
 const GPS_ROUTE_POINTS: RoutePoint[] = [
@@ -245,6 +274,9 @@ export default function HomeScreen() {
   const [adaptiveScanEnabled, setAdaptiveScanEnabled] = useState(DEFAULT_SETTINGS.adaptiveScanEnabled);
   const [hapticAlertsEnabled, setHapticAlertsEnabled] = useState(DEFAULT_SETTINGS.hapticAlertsEnabled);
   const [lowVisionModeEnabled, setLowVisionModeEnabled] = useState(DEFAULT_SETTINGS.lowVisionModeEnabled);
+  const [redAlertIntensity, setRedAlertIntensity] = useState<RedAlertIntensity>(DEFAULT_SETTINGS.redAlertIntensity);
+  const [signalPriorityMode, setSignalPriorityMode] = useState<SignalPriorityMode>(DEFAULT_SETTINGS.signalPriorityMode);
+  const [sensitivityMode, setSensitivityMode] = useState<SensitivityMode>(DEFAULT_SETTINGS.sensitivityMode);
   const [distanceValue, setDistanceValue] = useState(GPS_ROUTE_POINTS[0].signalDistanceLabel);
   const [speedValue, setSpeedValue] = useState(GPS_ROUTE_POINTS[0].fallbackSpeedLabel);
   const [redAlertVisible, setRedAlertVisible] = useState(false);
@@ -256,6 +288,7 @@ export default function HomeScreen() {
     initialDetection.pedestrianState,
   );
   const [liveSignalSummary, setLiveSignalSummary] = useState(initialDetection.summary);
+  const [prioritySummary, setPrioritySummary] = useState(initialDetection.prioritySummary);
   const [monitoringActive, setMonitoringActive] = useState(initialDetection.monitoringActive);
   const [lastAnalyzedAt, setLastAnalyzedAt] = useState(initialDetection.lastAnalyzedAt);
   const [lastDetectedAt, setLastDetectedAt] = useState(initialDetection.detectedAt);
@@ -286,6 +319,9 @@ export default function HomeScreen() {
         setAdaptiveScanEnabled(parsed.adaptiveScanEnabled ?? DEFAULT_SETTINGS.adaptiveScanEnabled);
         setHapticAlertsEnabled(parsed.hapticAlertsEnabled ?? DEFAULT_SETTINGS.hapticAlertsEnabled);
         setLowVisionModeEnabled(parsed.lowVisionModeEnabled ?? DEFAULT_SETTINGS.lowVisionModeEnabled);
+        setRedAlertIntensity(parsed.redAlertIntensity ?? DEFAULT_SETTINGS.redAlertIntensity);
+        setSignalPriorityMode(parsed.signalPriorityMode ?? DEFAULT_SETTINGS.signalPriorityMode);
+        setSensitivityMode(parsed.sensitivityMode ?? DEFAULT_SETTINGS.sensitivityMode);
       }
 
       if (savedHomeMasterValue) {
@@ -329,12 +365,16 @@ export default function HomeScreen() {
       setLiveLeftTurnState(detection.leftTurnState);
       setLivePedestrianState(detection.pedestrianState);
       setLiveSignalSummary(detection.summary);
+      setPrioritySummary(detection.prioritySummary);
       setMonitoringActive(detection.monitoringActive);
       setLastAnalyzedAt(detection.lastAnalyzedAt);
       setLastDetectedAt(detection.detectedAt);
       setScanIntervalMs(detection.scanIntervalMs);
       setLastSpeedKmh(detection.lastSpeedKmh);
       setCadenceMode(detection.cadenceMode);
+      setRedAlertIntensity(detection.redAlertIntensity);
+      setSignalPriorityMode(detection.priorityMode);
+      setSensitivityMode(detection.sensitivityMode);
     });
 
     loadTrafficSignalDetection().catch((error) => {
@@ -348,18 +388,21 @@ export default function HomeScreen() {
     const nextSignalState = liveSignalState !== "unknown" ? liveSignalState : SIGNAL_SEQUENCE[signalIndex];
     const isRedSignal = nextSignalState === "red";
 
-    if (!isRedSignal) {
+    if (!isRedSignal || redAlertIntensity === "off") {
       setRedAlertVisible(false);
       return;
     }
 
+    const intervalMs =
+      redAlertIntensity === "soft" ? 420 : redAlertIntensity === "strong" ? 170 : 260;
+
     setRedAlertVisible(true);
     const interval = setInterval(() => {
       setRedAlertVisible((prev) => !prev);
-    }, 260);
+    }, intervalMs);
 
     return () => clearInterval(interval);
-  }, [liveSignalState, signalIndex]);
+  }, [liveSignalState, redAlertIntensity, signalIndex]);
 
   useEffect(() => {
     const startGpsSync = async () => {
@@ -436,6 +479,21 @@ export default function HomeScreen() {
   );
   const currentLeftTurnMeta = useMemo(() => LEFT_TURN_META[liveLeftTurnState], [liveLeftTurnState]);
   const currentPedestrianMeta = useMemo(() => PEDESTRIAN_META[livePedestrianState], [livePedestrianState]);
+  const redAlertOverlayOpacity = useMemo(() => {
+    if (redAlertIntensity === "off") {
+      return 0;
+    }
+
+    if (redAlertIntensity === "soft") {
+      return redAlertVisible ? 0.18 : 0.03;
+    }
+
+    if (redAlertIntensity === "strong") {
+      return redAlertVisible ? 0.68 : 0.14;
+    }
+
+    return redAlertVisible ? 0.42 : 0.08;
+  }, [redAlertIntensity, redAlertVisible]);
   const lastAnalyzedLabel = useMemo(() => formatHudTime(lastAnalyzedAt), [lastAnalyzedAt]);
   const lastDetectedLabel = useMemo(() => formatHudTime(lastDetectedAt), [lastDetectedAt]);
   const arrowFontSize = ARROW_FONT_SIZE[arrowSize];
@@ -475,13 +533,13 @@ export default function HomeScreen() {
   return (
     <ScreenContainer style={[styles.screenContent, { backgroundColor: dynamicBackgroundColor }]}> 
       <View style={[styles.root, { backgroundColor: dynamicBackgroundColor }]}>
-        {isRedSignal ? (
+        {isRedSignal && redAlertIntensity !== "off" ? (
           <View
             pointerEvents="none"
             style={[
               styles.redAlertOverlay,
               redAlertVisible ? styles.redAlertOverlayVisible : styles.redAlertOverlayHidden,
-              { opacity: redAlertVisible ? getSignalGlowOpacity(0.54, homeMasterSettings.signalGlow.red) : 0.08 },
+              { opacity: getSignalGlowOpacity(redAlertOverlayOpacity, homeMasterSettings.signalGlow.red) },
             ]}
           />
         ) : null}
@@ -554,6 +612,26 @@ export default function HomeScreen() {
                   </Text>
                 </View>
               </View>
+              <Text style={[styles.signalSummaryCaption, lowVisionModeEnabled && styles.signalSummaryCaptionLowVision]}>
+                {prioritySummary}
+              </Text>
+              <View style={styles.signalModeRow}>
+                <View style={styles.signalModeChip}>
+                  <Text style={[styles.signalModeChipText, lowVisionModeEnabled && styles.signalModeChipTextLowVision]}>
+                    {PRIORITY_MODE_LABEL[signalPriorityMode]}
+                  </Text>
+                </View>
+                <View style={styles.signalModeChip}>
+                  <Text style={[styles.signalModeChipText, lowVisionModeEnabled && styles.signalModeChipTextLowVision]}>
+                    {SENSITIVITY_MODE_LABEL[sensitivityMode]}
+                  </Text>
+                </View>
+                <View style={styles.signalModeChip}>
+                  <Text style={[styles.signalModeChipText, lowVisionModeEnabled && styles.signalModeChipTextLowVision]}>
+                    {RED_ALERT_LABEL[redAlertIntensity]}
+                  </Text>
+                </View>
+              </View>
               <View style={styles.monitoringRow}>
                 <View style={[
                   styles.monitoringChip,
@@ -584,6 +662,12 @@ export default function HomeScreen() {
                   <Text style={[styles.monitoringInfoLabel, lowVisionModeEnabled && styles.monitoringInfoLabelLowVision]}>보조 기능</Text>
                   <Text style={[styles.monitoringInfoValue, lowVisionModeEnabled && styles.monitoringInfoValueLowVision]}>
                     {hapticAlertsEnabled ? `진동 ${cadenceMode}` : `무진동 ${cadenceMode}`}
+                  </Text>
+                </View>
+                <View style={styles.monitoringInfoBox}>
+                  <Text style={[styles.monitoringInfoLabel, lowVisionModeEnabled && styles.monitoringInfoLabelLowVision]}>인식 모드</Text>
+                  <Text style={[styles.monitoringInfoValue, lowVisionModeEnabled && styles.monitoringInfoValueLowVision]}>
+                    {PRIORITY_MODE_LABEL[signalPriorityMode]} · {SENSITIVITY_MODE_LABEL[sensitivityMode]}
                   </Text>
                 </View>
               </View>
@@ -847,6 +931,45 @@ const styles = StyleSheet.create({
   signalAssistTextLowVision: {
     fontSize: 20,
     lineHeight: 24,
+  },
+  signalSummaryCaption: {
+    marginTop: 12,
+    paddingHorizontal: 16,
+    fontSize: 15,
+    lineHeight: 20,
+    fontWeight: "800",
+    textAlign: "center",
+    color: "rgba(255, 255, 255, 0.9)",
+  },
+  signalSummaryCaptionLowVision: {
+    fontSize: 19,
+    lineHeight: 24,
+  },
+  signalModeRow: {
+    marginTop: 10,
+    flexDirection: "row",
+    flexWrap: "wrap",
+    justifyContent: "center",
+    gap: 8,
+    paddingHorizontal: 12,
+  },
+  signalModeChip: {
+    borderRadius: 999,
+    backgroundColor: "rgba(248, 250, 252, 0.22)",
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.16)",
+  },
+  signalModeChipText: {
+    fontSize: 13,
+    lineHeight: 16,
+    fontWeight: "900",
+    color: "#F8FAFC",
+  },
+  signalModeChipTextLowVision: {
+    fontSize: 17,
+    lineHeight: 20,
   },
   monitoringRow: {
     marginTop: 12,

@@ -35,6 +35,11 @@ import {
   type LayoutPresetKey,
 } from "@/lib/home-master-settings";
 import {
+  type RedAlertIntensity,
+  type SensitivityMode,
+  type SignalPriorityMode,
+} from "@/lib/traffic-signal-store";
+import {
   DEFAULT_VOICE_ALERT_SETTINGS,
   VOICE_LENGTH_OPTIONS,
   VOICE_STYLE_OPTIONS,
@@ -53,6 +58,9 @@ type AppSettings = {
   adaptiveScanEnabled: boolean;
   hapticAlertsEnabled: boolean;
   lowVisionModeEnabled: boolean;
+  redAlertIntensity: RedAlertIntensity;
+  signalPriorityMode: SignalPriorityMode;
+  sensitivityMode: SensitivityMode;
   selectedNavigationProvider: NavigationProvider;
   arrowSize: ArrowSize;
   quickDestinations: string[];
@@ -72,6 +80,9 @@ const DEFAULT_SETTINGS: AppSettings = {
   adaptiveScanEnabled: true,
   hapticAlertsEnabled: true,
   lowVisionModeEnabled: true,
+  redAlertIntensity: "balanced",
+  signalPriorityMode: "safety-first",
+  sensitivityMode: "standard",
   selectedNavigationProvider: "tmap",
   arrowSize: "huge",
   quickDestinations: ["집", "회사"],
@@ -122,6 +133,82 @@ const ARROW_SIZE_OPTIONS: Array<{
     key: "huge",
     title: "최대로",
     description: "시야 약해도 선명",
+  },
+];
+
+const RED_ALERT_INTENSITY_OPTIONS: Array<{
+  key: RedAlertIntensity;
+  title: string;
+  description: string;
+}> = [
+  {
+    key: "off",
+    title: "끄기",
+    description: "적색 신호여도 전체 화면 점멸 없이 카드 색상만 유지합니다.",
+  },
+  {
+    key: "soft",
+    title: "부드럽게",
+    description: "점멸 강도를 낮춰 눈부심을 줄입니다.",
+  },
+  {
+    key: "balanced",
+    title: "균형형",
+    description: "경고성과 시인성의 균형을 맞춥니다.",
+  },
+  {
+    key: "strong",
+    title: "강하게",
+    description: "적색 신호에서 더 강한 전체 화면 경고를 줍니다.",
+  },
+];
+
+const SIGNAL_PRIORITY_OPTIONS: Array<{
+  key: SignalPriorityMode;
+  title: string;
+  description: string;
+}> = [
+  {
+    key: "safety-first",
+    title: "안전 우선",
+    description: "차량 정지나 충돌 가능성을 먼저 경고해 가장 보수적으로 안내합니다.",
+  },
+  {
+    key: "pedestrian-first",
+    title: "보행 우선",
+    description: "보행 가능 신호를 먼저 읽고 차량 진행 신호는 보조 정보로 정리합니다.",
+  },
+  {
+    key: "vehicle-first",
+    title: "차량 우선",
+    description: "직진·좌회전 차량 흐름을 먼저 읽고 보행 신호는 보조 정보로 덧붙입니다.",
+  },
+];
+
+const SENSITIVITY_MODE_OPTIONS: Array<{
+  key: SensitivityMode;
+  title: string;
+  description: string;
+}> = [
+  {
+    key: "standard",
+    title: "기본 감도",
+    description: "과도한 추정을 줄이고 명확한 점등 위주로 판별합니다.",
+  },
+  {
+    key: "night",
+    title: "야간 고감도",
+    description: "어두운 배경과 역광 환경에서 작은 점등 차이를 더 세밀하게 읽습니다.",
+  },
+  {
+    key: "rain",
+    title: "우천 고감도",
+    description: "젖은 노면 반사와 흐린 렌즈 상황에서도 실제 신호 위치를 더 적극적으로 찾습니다.",
+  },
+  {
+    key: "auto",
+    title: "자동 환경 적응",
+    description: "주변 장면을 보고 야간·우천 성향을 추정해 감도를 자동으로 맞춥니다.",
   },
 ];
 
@@ -241,6 +328,15 @@ export default function SettingsScreen() {
   const [adaptiveScanEnabled, setAdaptiveScanEnabled] = useState(DEFAULT_SETTINGS.adaptiveScanEnabled);
   const [hapticAlertsEnabled, setHapticAlertsEnabled] = useState(DEFAULT_SETTINGS.hapticAlertsEnabled);
   const [lowVisionModeEnabled, setLowVisionModeEnabled] = useState(DEFAULT_SETTINGS.lowVisionModeEnabled);
+  const [redAlertIntensity, setRedAlertIntensity] = useState<RedAlertIntensity>(
+    DEFAULT_SETTINGS.redAlertIntensity,
+  );
+  const [signalPriorityMode, setSignalPriorityMode] = useState<SignalPriorityMode>(
+    DEFAULT_SETTINGS.signalPriorityMode,
+  );
+  const [sensitivityMode, setSensitivityMode] = useState<SensitivityMode>(
+    DEFAULT_SETTINGS.sensitivityMode,
+  );
   const [selectedNavigationProvider, setSelectedNavigationProvider] = useState<NavigationProvider>(
     DEFAULT_SETTINGS.selectedNavigationProvider,
   );
@@ -278,6 +374,9 @@ export default function SettingsScreen() {
           setAdaptiveScanEnabled(parsed.adaptiveScanEnabled ?? DEFAULT_SETTINGS.adaptiveScanEnabled);
           setHapticAlertsEnabled(parsed.hapticAlertsEnabled ?? DEFAULT_SETTINGS.hapticAlertsEnabled);
           setLowVisionModeEnabled(parsed.lowVisionModeEnabled ?? DEFAULT_SETTINGS.lowVisionModeEnabled);
+          setRedAlertIntensity(parsed.redAlertIntensity ?? DEFAULT_SETTINGS.redAlertIntensity);
+          setSignalPriorityMode(parsed.signalPriorityMode ?? DEFAULT_SETTINGS.signalPriorityMode);
+          setSensitivityMode(parsed.sensitivityMode ?? DEFAULT_SETTINGS.sensitivityMode);
           setSelectedNavigationProvider(
             parsed.selectedNavigationProvider ?? DEFAULT_SETTINGS.selectedNavigationProvider,
           );
@@ -366,6 +465,18 @@ export default function SettingsScreen() {
   const selectedStyleLabel = useMemo(() => {
     return VOICE_STYLE_OPTIONS.find((option) => option.key === voiceAlertStyle)?.title ?? "기본";
   }, [voiceAlertStyle]);
+
+  const selectedRedAlertLabel = useMemo(() => {
+    return RED_ALERT_INTENSITY_OPTIONS.find((option) => option.key === redAlertIntensity)?.title ?? "균형형";
+  }, [redAlertIntensity]);
+
+  const selectedPriorityLabel = useMemo(() => {
+    return SIGNAL_PRIORITY_OPTIONS.find((option) => option.key === signalPriorityMode)?.title ?? "안전 우선";
+  }, [signalPriorityMode]);
+
+  const selectedSensitivityLabel = useMemo(() => {
+    return SENSITIVITY_MODE_OPTIONS.find((option) => option.key === sensitivityMode)?.title ?? "기본 감도";
+  }, [sensitivityMode]);
 
   const selectedFontLabel = useMemo(() => {
     return FONT_PRESET_OPTIONS.find((option) => option.key === homeMasterSettings.fontPreset)?.title ?? "애플 Extra Bold";
@@ -520,6 +631,9 @@ export default function SettingsScreen() {
       adaptiveScanEnabled,
       hapticAlertsEnabled,
       lowVisionModeEnabled,
+      redAlertIntensity,
+      signalPriorityMode,
+      sensitivityMode,
       selectedNavigationProvider,
       arrowSize,
       quickDestinations,
@@ -580,7 +694,7 @@ export default function SettingsScreen() {
             <Text style={styles.summaryTitle}>현재 연동 상태</Text>
             <Text style={styles.summaryValue}>{currentProviderLabel}</Text>
             <Text style={styles.summaryDescription}>
-              음성 길이 {selectedLengthLabel} · 음성 스타일 {selectedStyleLabel} 기준으로 안내 문구를 조합합니다.
+              음성 길이 {selectedLengthLabel} · 음성 스타일 {selectedStyleLabel} · 적색 경고 {selectedRedAlertLabel} · {selectedPriorityLabel} · {selectedSensitivityLabel} 기준으로 안내 문구를 조합합니다.
             </Text>
           </View>
 
@@ -708,6 +822,120 @@ export default function SettingsScreen() {
             <Text style={styles.sectionDescription}>
               홈 HUD와 카메라 화면의 핵심 신호 문구와 상태 칩을 더 크게 키워 저시력 환경에서도 빠르게 읽도록 돕습니다.
             </Text>
+          </View>
+
+          <View style={styles.sectionCard}>
+            <Text style={styles.sectionTitle}>적색 점멸 경고 강도</Text>
+            <Text style={styles.sectionDescription}>
+              적색 신호가 감지되었을 때 전체 화면 점멸 경고를 끄거나 강도를 선택해 시력 피로도에 맞게 조절합니다.
+            </Text>
+
+            <View style={styles.optionList}>
+              {RED_ALERT_INTENSITY_OPTIONS.map((option) => {
+                const selected = option.key === redAlertIntensity;
+
+                return (
+                  <Pressable
+                    key={option.key}
+                    accessibilityRole="button"
+                    onPress={() => setRedAlertIntensity(option.key)}
+                    style={({ pressed }) => [
+                      styles.arrowOption,
+                      selected && styles.arrowOptionSelected,
+                      pressed && styles.buttonPressed,
+                    ]}
+                  >
+                    <Text style={[styles.arrowOptionTitle, selected && styles.arrowOptionTitleSelected]}>
+                      {option.title}
+                    </Text>
+                    <Text
+                      style={[
+                        styles.arrowOptionDescription,
+                        selected && styles.arrowOptionDescriptionSelected,
+                      ]}
+                    >
+                      {option.description}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+          </View>
+
+          <View style={styles.sectionCard}>
+            <Text style={styles.sectionTitle}>신호 우선순위 안내</Text>
+            <Text style={styles.sectionDescription}>
+              보행 신호와 차량 신호가 동시에 보일 때 어떤 흐름을 먼저 읽어 줄지 선택합니다.
+            </Text>
+
+            <View style={styles.optionList}>
+              {SIGNAL_PRIORITY_OPTIONS.map((option) => {
+                const selected = option.key === signalPriorityMode;
+
+                return (
+                  <Pressable
+                    key={option.key}
+                    accessibilityRole="button"
+                    onPress={() => setSignalPriorityMode(option.key)}
+                    style={({ pressed }) => [
+                      styles.arrowOption,
+                      selected && styles.arrowOptionSelected,
+                      pressed && styles.buttonPressed,
+                    ]}
+                  >
+                    <Text style={[styles.arrowOptionTitle, selected && styles.arrowOptionTitleSelected]}>
+                      {option.title}
+                    </Text>
+                    <Text
+                      style={[
+                        styles.arrowOptionDescription,
+                        selected && styles.arrowOptionDescriptionSelected,
+                      ]}
+                    >
+                      {option.description}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+          </View>
+
+          <View style={styles.sectionCard}>
+            <Text style={styles.sectionTitle}>야간·우천 고감도 모드</Text>
+            <Text style={styles.sectionDescription}>
+              밤길, 빗물 반사, 흐린 렌즈 같은 환경에 맞춰 AI 감도를 야간·우천·자동 적응으로 조절합니다.
+            </Text>
+
+            <View style={styles.optionList}>
+              {SENSITIVITY_MODE_OPTIONS.map((option) => {
+                const selected = option.key === sensitivityMode;
+
+                return (
+                  <Pressable
+                    key={option.key}
+                    accessibilityRole="button"
+                    onPress={() => setSensitivityMode(option.key)}
+                    style={({ pressed }) => [
+                      styles.arrowOption,
+                      selected && styles.arrowOptionSelected,
+                      pressed && styles.buttonPressed,
+                    ]}
+                  >
+                    <Text style={[styles.arrowOptionTitle, selected && styles.arrowOptionTitleSelected]}>
+                      {option.title}
+                    </Text>
+                    <Text
+                      style={[
+                        styles.arrowOptionDescription,
+                        selected && styles.arrowOptionDescriptionSelected,
+                      ]}
+                    >
+                      {option.description}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
           </View>
 
           <View style={styles.sectionCard}>
