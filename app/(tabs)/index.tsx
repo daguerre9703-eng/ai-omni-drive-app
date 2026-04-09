@@ -381,12 +381,21 @@ export default function HomeScreen() {
 
     return currentSignal.glow;
   }, [currentSignal.glow, currentSignalState, homeMasterSettings.signalGlow.green, homeMasterSettings.signalGlow.red]);
-  const shellTransform = (key: keyof HomeMasterSettings["positions"]) => ({
-    transform: [
-      { translateX: homeMasterSettings.positions[key].x },
-      { translateY: homeMasterSettings.positions[key].y + homeMasterSettings.verticalBalance },
-    ],
-  });
+  const shellTransform = (key: keyof HomeMasterSettings["positions"]) => {
+    const rawTranslateY = homeMasterSettings.positions[key].y + homeMasterSettings.verticalBalance;
+    const translateY = key === "signal"
+      ? Math.min(rawTranslateY, 0)
+      : key === "speed"
+        ? Math.max(rawTranslateY, 16)
+        : rawTranslateY;
+
+    return {
+      transform: [
+        { translateX: homeMasterSettings.positions[key].x },
+        { translateY },
+      ],
+    };
+  };
 
   const handleAdvanceDirection = () => {
     setDirectionIndex((prev) => (prev + 1) % DIRECTION_SEQUENCE.length);
