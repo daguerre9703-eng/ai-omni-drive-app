@@ -1,5 +1,10 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
+import {
+  type DetectedDrivingEnvironment,
+  type RedAlertEnvironmentPreset,
+} from "@/lib/red-alert-environment";
+
 export type TrafficSignalState = "red" | "yellow" | "green" | "unknown";
 export type LeftTurnSignalState = "go" | "stop" | "unknown";
 export type PedestrianSignalState = "walk" | "stop" | "unknown";
@@ -8,6 +13,7 @@ export type ScanCadenceMode = "slow" | "normal" | "fast";
 export type RedAlertIntensity = "off" | "soft" | "balanced" | "strong";
 export type SignalPriorityMode = "pedestrian-first" | "vehicle-first" | "safety-first";
 export type SensitivityMode = "standard" | "night" | "rain" | "auto";
+export type { DetectedDrivingEnvironment, RedAlertEnvironmentPreset };
 
 export type TrafficSignalDetection = {
   state: TrafficSignalState;
@@ -26,6 +32,11 @@ export type TrafficSignalDetection = {
   redAlertIntensity: RedAlertIntensity;
   priorityMode: SignalPriorityMode;
   sensitivityMode: SensitivityMode;
+  autoRedAlertEnvironmentEnabled: boolean;
+  detectedEnvironment: DetectedDrivingEnvironment;
+  appliedRedAlertEnvironmentPreset: RedAlertEnvironmentPreset;
+  environmentSummary: string;
+  environmentReason: string;
 };
 
 export const TRAFFIC_SIGNAL_STORAGE_KEY = "ai-omni-drive:traffic-signal";
@@ -47,6 +58,11 @@ export const DEFAULT_TRAFFIC_SIGNAL_DETECTION: TrafficSignalDetection = {
   redAlertIntensity: "balanced",
   priorityMode: "safety-first",
   sensitivityMode: "standard",
+  autoRedAlertEnvironmentEnabled: true,
+  detectedEnvironment: "unknown",
+  appliedRedAlertEnvironmentPreset: "standard",
+  environmentSummary: "환경 인식 대기",
+  environmentReason: "카메라 환경 분석 전에는 표준 주간 프리셋을 유지합니다.",
 };
 
 const listeners = new Set<(value: TrafficSignalDetection) => void>();
@@ -109,6 +125,22 @@ function normalizeSensitivityMode(value?: string | null): SensitivityMode {
   return DEFAULT_TRAFFIC_SIGNAL_DETECTION.sensitivityMode;
 }
 
+function normalizeDetectedEnvironment(value?: string | null): DetectedDrivingEnvironment {
+  if (value === "clear" || value === "night" || value === "rain" || value === "fog") {
+    return value;
+  }
+
+  return DEFAULT_TRAFFIC_SIGNAL_DETECTION.detectedEnvironment;
+}
+
+function normalizeRedAlertEnvironmentPreset(value?: string | null): RedAlertEnvironmentPreset {
+  if (value === "standard" || value === "night" || value === "rain" || value === "fog" || value === "custom") {
+    return value;
+  }
+
+  return DEFAULT_TRAFFIC_SIGNAL_DETECTION.appliedRedAlertEnvironmentPreset;
+}
+
 function normalizeDetection(
   value?: Partial<TrafficSignalDetection> | null,
 ): TrafficSignalDetection {
@@ -148,6 +180,18 @@ function normalizeDetection(
     redAlertIntensity: normalizeRedAlertIntensity(value?.redAlertIntensity),
     priorityMode: normalizePriorityMode(value?.priorityMode),
     sensitivityMode: normalizeSensitivityMode(value?.sensitivityMode),
+    autoRedAlertEnvironmentEnabled:
+      typeof value?.autoRedAlertEnvironmentEnabled === "boolean"
+        ? value.autoRedAlertEnvironmentEnabled
+        : DEFAULT_TRAFFIC_SIGNAL_DETECTION.autoRedAlertEnvironmentEnabled,
+    detectedEnvironment: normalizeDetectedEnvironment(value?.detectedEnvironment),
+    appliedRedAlertEnvironmentPreset: normalizeRedAlertEnvironmentPreset(
+      value?.appliedRedAlertEnvironmentPreset,
+    ),
+    environmentSummary:
+      value?.environmentSummary?.trim() || DEFAULT_TRAFFIC_SIGNAL_DETECTION.environmentSummary,
+    environmentReason:
+      value?.environmentReason?.trim() || DEFAULT_TRAFFIC_SIGNAL_DETECTION.environmentReason,
   };
 }
 

@@ -16,11 +16,17 @@ import {
 } from "react-native";
 
 import { ScreenContainer } from "@/components/screen-container";
+import {
+  buildAutoRedAlertEnvironmentState,
+  getDetectedDrivingEnvironmentLabel,
+  type RedAlertEnvironmentPreset,
+} from "@/lib/red-alert-environment";
 import { trpc } from "@/lib/trpc";
 import {
   DEFAULT_TRAFFIC_SIGNAL_DETECTION,
   getTrafficSignalDetection,
   type DetectionRange,
+  type DetectedDrivingEnvironment,
   type RedAlertIntensity,
   type SensitivityMode,
   type SignalPriorityMode,
@@ -44,6 +50,10 @@ type CameraSettings = {
   hapticAlertsEnabled: boolean;
   lowVisionModeEnabled: boolean;
   redAlertIntensity: RedAlertIntensity;
+  redAlertEnvironmentPreset: RedAlertEnvironmentPreset;
+  redAlertBrightness: number;
+  redAlertPeriodMs: number;
+  autoRedAlertEnvironmentEnabled: boolean;
   signalPriorityMode: SignalPriorityMode;
   sensitivityMode: SensitivityMode;
 };
@@ -60,6 +70,10 @@ const DEFAULT_CAMERA_SETTINGS: CameraSettings = {
   hapticAlertsEnabled: true,
   lowVisionModeEnabled: true,
   redAlertIntensity: "balanced",
+  redAlertEnvironmentPreset: "standard",
+  redAlertBrightness: 0.42,
+  redAlertPeriodMs: 260,
+  autoRedAlertEnvironmentEnabled: true,
   signalPriorityMode: "safety-first",
   sensitivityMode: "standard",
 };
@@ -215,12 +229,24 @@ export default function CameraScreen() {
   const [redAlertIntensity, setRedAlertIntensity] = useState<RedAlertIntensity>(
     DEFAULT_CAMERA_SETTINGS.redAlertIntensity,
   );
+  const [redAlertEnvironmentPreset, setRedAlertEnvironmentPreset] = useState<RedAlertEnvironmentPreset>(
+    initialDetection.appliedRedAlertEnvironmentPreset,
+  );
+  const [redAlertBrightness, setRedAlertBrightness] = useState(DEFAULT_CAMERA_SETTINGS.redAlertBrightness);
+  const [redAlertPeriodMs, setRedAlertPeriodMs] = useState(DEFAULT_CAMERA_SETTINGS.redAlertPeriodMs);
+  const [autoRedAlertEnvironmentEnabled, setAutoRedAlertEnvironmentEnabled] = useState(
+    initialDetection.autoRedAlertEnvironmentEnabled,
+  );
   const [signalPriorityMode, setSignalPriorityMode] = useState<SignalPriorityMode>(
     DEFAULT_CAMERA_SETTINGS.signalPriorityMode,
   );
   const [sensitivityMode, setSensitivityMode] = useState<SensitivityMode>(
     DEFAULT_CAMERA_SETTINGS.sensitivityMode,
   );
+  const [detectedEnvironment, setDetectedEnvironment] = useState<DetectedDrivingEnvironment>(
+    initialDetection.detectedEnvironment,
+  );
+  const [environmentReason, setEnvironmentReason] = useState(initialDetection.environmentReason);
   const [permission, requestPermission] = useCameraPermissions();
 
   const cameraRef = useRef<CameraView | null>(null);
@@ -260,6 +286,14 @@ export default function CameraScreen() {
         setHapticAlertsEnabled(parsed.hapticAlertsEnabled ?? DEFAULT_CAMERA_SETTINGS.hapticAlertsEnabled);
         setLowVisionModeEnabled(parsed.lowVisionModeEnabled ?? DEFAULT_CAMERA_SETTINGS.lowVisionModeEnabled);
         setRedAlertIntensity(parsed.redAlertIntensity ?? DEFAULT_CAMERA_SETTINGS.redAlertIntensity);
+        setRedAlertEnvironmentPreset(
+          parsed.redAlertEnvironmentPreset ?? DEFAULT_CAMERA_SETTINGS.redAlertEnvironmentPreset,
+        );
+        setRedAlertBrightness(parsed.redAlertBrightness ?? DEFAULT_CAMERA_SETTINGS.redAlertBrightness);
+        setRedAlertPeriodMs(parsed.redAlertPeriodMs ?? DEFAULT_CAMERA_SETTINGS.redAlertPeriodMs);
+        setAutoRedAlertEnvironmentEnabled(
+          parsed.autoRedAlertEnvironmentEnabled ?? DEFAULT_CAMERA_SETTINGS.autoRedAlertEnvironmentEnabled,
+        );
         setSignalPriorityMode(parsed.signalPriorityMode ?? DEFAULT_CAMERA_SETTINGS.signalPriorityMode);
         setSensitivityMode(parsed.sensitivityMode ?? DEFAULT_CAMERA_SETTINGS.sensitivityMode);
       } catch (error) {
@@ -342,6 +376,16 @@ export default function CameraScreen() {
         });
 
         const detectedAt = Date.now();
+        const autoEnvironmentState = buildAutoRedAlertEnvironmentState(result.drivingEnvironment);
+        const appliedRedAlertEnvironmentPreset = autoRedAlertEnvironmentEnabled
+          ? autoEnvironmentState.preset
+          : redAlertEnvironmentPreset;
+        const environmentSummary = autoRedAlertEnvironmentEnabled
+          ? `${autoEnvironmentState.detectedEnvironmentLabel} 감지 · ${autoEnvironmentState.presetLabel} 자동 적용`
+          : `${getDetectedDrivingEnvironmentLabel(result.drivingEnvironment)} 감지 · 수동 프리셋 유지`;
+        const nextEnvironmentReason = autoRedAlertEnvironmentEnabled
+          ? `${result.environmentSummary} · ${autoEnvironmentState.environmentReason}`
+          : `${result.environmentSummary} · 자동 전환이 꺼져 있어 ${redAlertEnvironmentPreset} 프리셋을 유지합니다.`;
 
         await setTrafficSignalDetection({
           state: result.signalState,
@@ -360,18 +404,30 @@ export default function CameraScreen() {
           redAlertIntensity,
           priorityMode: signalPriorityMode,
           sensitivityMode,
+          autoRedAlertEnvironmentEnabled,
+          detectedEnvironment: result.drivingEnvironment,
+          appliedRedAlertEnvironmentPreset,
+          environmentSummary,
+          environmentReason: nextEnvironmentReason,
         });
 
+        setDetectedEnvironment(result.drivingEnvironment);
+        setEnvironmentReason(nextEnvironmentReason);
+        setRedAlertEnvironmentPreset(appliedRedAlertEnvironmentPreset);
+        if (autoRedAlertEnvironmentEnabled) {
+          setRedAlertBrightness(autoEnvironmentState.brightness);
+          setRedAlertPeriodMs(autoEnvironmentState.periodMs);
+        }
         setLastAnalyzedAt(detectedAt);
         setLastDetectedAt(detectedAt);
         setLatestResultText(`${result.displayLabel} · 신뢰도 ${Math.round(result.confidence * 100)}%`);
         setLatestDetailText(
-          `${result.prioritySummary} · ${result.leftTurnLabel} · ${result.pedestrianLabel}`,
+          `${result.prioritySummary} · ${result.leftTurnLabel} · ${result.pedestrianLabel} · ${environmentSummary}`,
         );
         setLiveStatusText(
           monitoringActiveRef.current
-            ? `${resolveScanProfile(speedRef.current).label} · ${result.displayLabel}`
-            : `수동 인식 완료 · ${result.displayLabel}`,
+            ? `${resolveScanProfile(speedRef.current).label} · ${result.displayLabel} · ${appliedRedAlertEnvironmentPreset}`
+            : `수동 인식 완료 · ${result.displayLabel} · ${appliedRedAlertEnvironmentPreset}`,
         );
 
         const previousState = lastDetectedStateRef.current;
@@ -424,6 +480,11 @@ export default function CameraScreen() {
           redAlertIntensity,
           priorityMode: signalPriorityMode,
           sensitivityMode,
+          autoRedAlertEnvironmentEnabled,
+          detectedEnvironment,
+          appliedRedAlertEnvironmentPreset: redAlertEnvironmentPreset,
+          environmentSummary: autoRedAlertEnvironmentEnabled ? "자동 환경 전환 대기" : "수동 프리셋 유지 중",
+          environmentReason,
         });
 
         if (trigger === "manual") {
@@ -440,7 +501,11 @@ export default function CameraScreen() {
       cameraReady,
       detectSignal,
       ensurePermission,
+      autoRedAlertEnvironmentEnabled,
+      detectedEnvironment,
+      environmentReason,
       hapticAlertsEnabled,
+      redAlertEnvironmentPreset,
       redAlertIntensity,
       selectedRange,
       sensitivityMode,
@@ -658,6 +723,11 @@ export default function CameraScreen() {
               </View>
               <View style={styles.featureBadge}>
                 <Text style={[styles.featureBadgeText, lowVisionModeEnabled && styles.featureBadgeTextLowVision]}>
+                  {autoRedAlertEnvironmentEnabled ? `환경 자동 ${getDetectedDrivingEnvironmentLabel(detectedEnvironment)}` : "환경 수동 유지"}
+                </Text>
+              </View>
+              <View style={styles.featureBadge}>
+                <Text style={[styles.featureBadgeText, lowVisionModeEnabled && styles.featureBadgeTextLowVision]}>
                   {PRIORITY_LABELS[signalPriorityMode]}
                 </Text>
               </View>
@@ -787,6 +857,12 @@ export default function CameraScreen() {
             </Text>
             <Text style={[styles.summarySubMeta, lowVisionModeEnabled && styles.summarySubMetaLowVision]}>
               {PRIORITY_LABELS[signalPriorityMode]} · {SENSITIVITY_LABELS[sensitivityMode]} · {RED_ALERT_LABELS[redAlertIntensity]}
+            </Text>
+            <Text style={[styles.summarySubMeta, lowVisionModeEnabled && styles.summarySubMetaLowVision]}>
+              {autoRedAlertEnvironmentEnabled ? `${getDetectedDrivingEnvironmentLabel(detectedEnvironment)} 감지 시 ${redAlertEnvironmentPreset} 프리셋 자동 적용` : `${redAlertEnvironmentPreset} 프리셋 수동 유지`} · 밝기 {Math.round(redAlertBrightness * 100)}% · 주기 {Math.round(redAlertPeriodMs)}ms
+            </Text>
+            <Text style={[styles.summarySubMeta, lowVisionModeEnabled && styles.summarySubMetaLowVision]}>
+              {environmentReason}
             </Text>
             <Text style={[styles.summarySubMeta, lowVisionModeEnabled && styles.summarySubMetaLowVision]}>
               {adaptiveScanEnabled ? "속도 적응 스캔" : "고정 주기 스캔"} · {Math.round(lastSpeedKmh)} km/h · {(scanIntervalMs / 1000).toFixed(1)}초 · {cadenceMode}

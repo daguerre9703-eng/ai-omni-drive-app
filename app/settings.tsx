@@ -35,6 +35,10 @@ import {
   type LayoutPresetKey,
 } from "@/lib/home-master-settings";
 import {
+  RED_ALERT_ENVIRONMENT_PRESET_OPTIONS,
+  type RedAlertEnvironmentPreset,
+} from "@/lib/red-alert-environment";
+import {
   type RedAlertIntensity,
   type SensitivityMode,
   type SignalPriorityMode,
@@ -49,7 +53,6 @@ import {
 
 type NavigationProvider = "kakaomap" | "inavi" | "tmap";
 type ArrowSize = "large" | "xlarge" | "huge";
-type RedAlertEnvironmentPreset = "standard" | "night" | "rain" | "fog" | "custom";
 
 type AppSettings = {
   voiceGuideEnabled: boolean;
@@ -63,6 +66,7 @@ type AppSettings = {
   redAlertEnvironmentPreset: RedAlertEnvironmentPreset;
   redAlertBrightness: number;
   redAlertPeriodMs: number;
+  autoRedAlertEnvironmentEnabled: boolean;
   signalPriorityMode: SignalPriorityMode;
   sensitivityMode: SensitivityMode;
   selectedNavigationProvider: NavigationProvider;
@@ -88,6 +92,7 @@ const DEFAULT_SETTINGS: AppSettings = {
   redAlertEnvironmentPreset: "standard",
   redAlertBrightness: 0.42,
   redAlertPeriodMs: 260,
+  autoRedAlertEnvironmentEnabled: true,
   signalPriorityMode: "safety-first",
   sensitivityMode: "standard",
   selectedNavigationProvider: "tmap",
@@ -167,43 +172,6 @@ const RED_ALERT_INTENSITY_OPTIONS: Array<{
     key: "strong",
     title: "강하게",
     description: "적색 신호에서 더 강한 전체 화면 경고를 줍니다.",
-  },
-];
-
-const RED_ALERT_ENVIRONMENT_PRESET_OPTIONS: Array<{
-  key: Exclude<RedAlertEnvironmentPreset, "custom">;
-  title: string;
-  description: string;
-  brightness: number;
-  periodMs: number;
-}> = [
-  {
-    key: "standard",
-    title: "표준 주간",
-    description: "도심 주간 주행에 맞춘 기본 경고 강도입니다.",
-    brightness: 0.42,
-    periodMs: 260,
-  },
-  {
-    key: "night",
-    title: "야간 도로",
-    description: "눈부심을 줄이기 위해 밝기를 낮추고 주기를 약간 느리게 맞춥니다.",
-    brightness: 0.28,
-    periodMs: 320,
-  },
-  {
-    key: "rain",
-    title: "우천 반사",
-    description: "젖은 노면 반사 속에서도 눈에 띄도록 밝기를 높이고 주기를 빠르게 맞춥니다.",
-    brightness: 0.52,
-    periodMs: 220,
-  },
-  {
-    key: "fog",
-    title: "안개·흐림",
-    description: "대비가 낮은 시야를 고려해 밝기를 높이되 과도한 점멸은 줄입니다.",
-    brightness: 0.48,
-    periodMs: 300,
   },
 ];
 
@@ -380,6 +348,9 @@ export default function SettingsScreen() {
   );
   const [redAlertBrightness, setRedAlertBrightness] = useState(DEFAULT_SETTINGS.redAlertBrightness);
   const [redAlertPeriodMs, setRedAlertPeriodMs] = useState(DEFAULT_SETTINGS.redAlertPeriodMs);
+  const [autoRedAlertEnvironmentEnabled, setAutoRedAlertEnvironmentEnabled] = useState(
+    DEFAULT_SETTINGS.autoRedAlertEnvironmentEnabled,
+  );
   const [redAlertPreviewOn, setRedAlertPreviewOn] = useState(true);
   const [signalPriorityMode, setSignalPriorityMode] = useState<SignalPriorityMode>(
     DEFAULT_SETTINGS.signalPriorityMode,
@@ -430,6 +401,9 @@ export default function SettingsScreen() {
           );
           setRedAlertBrightness(parsed.redAlertBrightness ?? DEFAULT_SETTINGS.redAlertBrightness);
           setRedAlertPeriodMs(parsed.redAlertPeriodMs ?? DEFAULT_SETTINGS.redAlertPeriodMs);
+          setAutoRedAlertEnvironmentEnabled(
+            parsed.autoRedAlertEnvironmentEnabled ?? DEFAULT_SETTINGS.autoRedAlertEnvironmentEnabled,
+          );
           setSignalPriorityMode(parsed.signalPriorityMode ?? DEFAULT_SETTINGS.signalPriorityMode);
           setSensitivityMode(parsed.sensitivityMode ?? DEFAULT_SETTINGS.sensitivityMode);
           setSelectedNavigationProvider(
@@ -563,8 +537,14 @@ export default function SettingsScreen() {
       return "미리보기 OFF";
     }
 
-    return `${selectedRedAlertPresetLabel} · 밝기 ${redAlertBrightnessLabel} · 주기 ${redAlertPeriodLabel}`;
-  }, [redAlertBrightnessLabel, redAlertIntensity, redAlertPeriodLabel, selectedRedAlertPresetLabel]);
+    return `${autoRedAlertEnvironmentEnabled ? "자동 전환" : "수동 유지"} · ${selectedRedAlertPresetLabel} · 밝기 ${redAlertBrightnessLabel} · 주기 ${redAlertPeriodLabel}`;
+  }, [
+    autoRedAlertEnvironmentEnabled,
+    redAlertBrightnessLabel,
+    redAlertIntensity,
+    redAlertPeriodLabel,
+    selectedRedAlertPresetLabel,
+  ]);
 
   const selectedPriorityLabel = useMemo(() => {
     return SIGNAL_PRIORITY_OPTIONS.find((option) => option.key === signalPriorityMode)?.title ?? "안전 우선";
@@ -756,6 +736,7 @@ export default function SettingsScreen() {
       redAlertEnvironmentPreset,
       redAlertBrightness,
       redAlertPeriodMs,
+      autoRedAlertEnvironmentEnabled,
       signalPriorityMode,
       sensitivityMode,
       selectedNavigationProvider,
@@ -818,7 +799,7 @@ export default function SettingsScreen() {
             <Text style={styles.summaryTitle}>현재 연동 상태</Text>
             <Text style={styles.summaryValue}>{currentProviderLabel}</Text>
             <Text style={styles.summaryDescription}>
-              음성 길이 {selectedLengthLabel} · 음성 스타일 {selectedStyleLabel} · 적색 경고 {selectedRedAlertLabel} · 환경 프리셋 {selectedRedAlertPresetLabel} · 밝기 {redAlertBrightnessLabel} · 주기 {redAlertPeriodLabel} · {selectedPriorityLabel} · {selectedSensitivityLabel} 기준으로 안내 문구를 조합합니다.
+              음성 길이 {selectedLengthLabel} · 음성 스타일 {selectedStyleLabel} · 적색 경고 {selectedRedAlertLabel} · 환경 프리셋 {selectedRedAlertPresetLabel} · {autoRedAlertEnvironmentEnabled ? "자동 전환 ON" : "수동 유지"} · 밝기 {redAlertBrightnessLabel} · 주기 {redAlertPeriodLabel} · {selectedPriorityLabel} · {selectedSensitivityLabel} 기준으로 안내 문구를 조합합니다.
             </Text>
           </View>
 
@@ -985,6 +966,13 @@ export default function SettingsScreen() {
               })}
             </View>
 
+            <View style={styles.sectionHeaderRow}>
+              <Text style={styles.sectionTitle}>환경 프리셋 자동 전환</Text>
+              <Switch value={autoRedAlertEnvironmentEnabled} onValueChange={setAutoRedAlertEnvironmentEnabled} />
+            </View>
+            <Text style={styles.sectionDescription}>
+              전방 카메라가 야간, 우천, 안개·흐림을 감지하면 해당 환경에 맞는 적색 점멸 프리셋으로 자동 전환합니다. 끄면 아래에서 고른 프리셋을 계속 유지합니다.
+            </Text>
             <Text style={styles.sectionDescription}>
               야간, 우천, 안개 같은 운전 환경에 맞는 추천 조합을 한 번에 불러온 뒤 필요하면 슬라이더로 미세 조정할 수 있습니다.
             </Text>

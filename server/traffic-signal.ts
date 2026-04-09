@@ -8,6 +8,7 @@ type LeftTurnSignalState = "go" | "stop" | "unknown";
 type PedestrianSignalState = "walk" | "stop" | "unknown";
 type SignalPriorityMode = "pedestrian-first" | "vehicle-first" | "safety-first";
 type SensitivityMode = "standard" | "night" | "rain" | "auto";
+type DetectedDrivingEnvironment = "clear" | "night" | "rain" | "fog" | "unknown";
 
 const detectTrafficSignalInput = z.object({
   base64Image: z.string().min(100),
@@ -52,6 +53,14 @@ const SENSITIVITY_LABELS: Record<SensitivityMode, string> = {
   auto: "자동 환경 적응",
 };
 
+const ENVIRONMENT_LABELS: Record<DetectedDrivingEnvironment, string> = {
+  clear: "맑은 주간",
+  night: "야간",
+  rain: "우천",
+  fog: "안개·흐림",
+  unknown: "환경 미확인",
+};
+
 const coerceSignalState = (value: string): SignalState => {
   if (value === "red" || value === "yellow" || value === "green") {
     return value;
@@ -70,6 +79,14 @@ const coerceLeftTurnState = (value: string): LeftTurnSignalState => {
 
 const coercePedestrianState = (value: string): PedestrianSignalState => {
   if (value === "walk" || value === "stop") {
+    return value;
+  }
+
+  return "unknown";
+};
+
+const coerceDrivingEnvironment = (value: string): DetectedDrivingEnvironment => {
+  if (value === "clear" || value === "night" || value === "rain" || value === "fog") {
     return value;
   }
 
@@ -159,7 +176,7 @@ export const trafficSignalRouter = router({
           content: [
             {
               type: "text",
-              text: `카메라 인식 범위는 ${input.detectionRange}입니다. 우선순위 규칙은 ${PRIORITY_MODE_LABELS[input.priorityMode]}이고, 감도 모드는 ${SENSITIVITY_LABELS[input.sensitivityMode]}입니다. 중앙 시야 전방의 일반 차량 신호(red/yellow/green/unknown), 좌회전 화살표(go/stop/unknown), 보행자 신호(walk/stop/unknown)를 각각 판별하고 JSON으로만 응답하세요. ${input.sensitivityMode === "night" ? "야간 모드이므로 어두운 배경, 눈부심, 헤드라이트 역광 속 작은 점등 차이를 더 세밀하게 읽되 확신이 낮으면 unknown을 선택하세요." : input.sensitivityMode === "rain" ? "우천 모드이므로 빗물 반사, 젖은 노면, 흐린 렌즈, 번짐이 있어도 신호의 실제 점등 위치를 우선 판단하되 확신이 낮으면 unknown을 선택하세요." : input.sensitivityMode === "auto" ? "자동 환경 적응 모드이므로 야간, 우천, 흐림, 역광 여부를 먼저 추정하고 그에 맞는 민감도로 판별하되 과도한 추정은 피하고 애매하면 unknown을 선택하세요." : "기본 감도로 과도한 추정 없이 명확한 점등만 판별하세요."} 보행자와 차량 신호가 동시에 보일 때는 두 신호를 모두 독립 판별하되 summary에는 어떤 신호가 충돌하는지 한 문장으로 간단히 적어 주세요. crop hint width=${input.cropHint.widthRatio}, height=${input.cropHint.heightRatio}`,
+              text: `카메라 인식 범위는 ${input.detectionRange}입니다. 우선순위 규칙은 ${PRIORITY_MODE_LABELS[input.priorityMode]}이고, 감도 모드는 ${SENSITIVITY_LABELS[input.sensitivityMode]}입니다. 중앙 시야 전방의 일반 차량 신호(red/yellow/green/unknown), 좌회전 화살표(go/stop/unknown), 보행자 신호(walk/stop/unknown)를 각각 판별하고, 장면의 주행 환경을 clear/night/rain/fog/unknown 중 하나로 추정하세요. environmentSummary에는 왜 해당 환경으로 판단했는지 한 문장으로 설명하세요. ${input.sensitivityMode === "night" ? "야간 모드이므로 어두운 배경, 눈부심, 헤드라이트 역광 속 작은 점등 차이를 더 세밀하게 읽되 확신이 낮으면 unknown을 선택하세요." : input.sensitivityMode === "rain" ? "우천 모드이므로 빗물 반사, 젖은 노면, 흐린 렌즈, 번짐이 있어도 신호의 실제 점등 위치를 우선 판단하되 확신이 낮으면 unknown을 선택하세요." : input.sensitivityMode === "auto" ? "자동 환경 적응 모드이므로 야간, 우천, 흐림, 역광 여부를 먼저 추정하고 그에 맞는 민감도로 판별하되 과도한 추정은 피하고 애매하면 unknown을 선택하세요." : "기본 감도로 과도한 추정 없이 명확한 점등만 판별하세요."} 보행자와 차량 신호가 동시에 보일 때는 두 신호를 모두 독립 판별하되 summary에는 어떤 신호가 충돌하는지 한 문장으로 간단히 적어 주세요. crop hint width=${input.cropHint.widthRatio}, height=${input.cropHint.heightRatio}`,
             },
             {
               type: "image_url",
@@ -192,6 +209,13 @@ export const trafficSignalRouter = router({
                 type: "string",
                 enum: ["walk", "stop", "unknown"],
               },
+              drivingEnvironment: {
+                type: "string",
+                enum: ["clear", "night", "rain", "fog", "unknown"],
+              },
+              environmentSummary: {
+                type: "string",
+              },
               confidence: {
                 type: "number",
                 minimum: 0,
@@ -201,7 +225,7 @@ export const trafficSignalRouter = router({
                 type: "string",
               },
             },
-            required: ["signalState", "leftTurnState", "pedestrianState", "confidence", "summary"],
+            required: ["signalState", "leftTurnState", "pedestrianState", "drivingEnvironment", "environmentSummary", "confidence", "summary"],
           },
         },
       },
@@ -214,6 +238,8 @@ export const trafficSignalRouter = router({
       signalState?: string;
       leftTurnState?: string;
       pedestrianState?: string;
+      drivingEnvironment?: string;
+      environmentSummary?: string;
       confidence?: number;
       summary?: string;
     };
@@ -221,6 +247,9 @@ export const trafficSignalRouter = router({
     const signalState = coerceSignalState(parsed.signalState ?? "unknown");
     const leftTurnState = coerceLeftTurnState(parsed.leftTurnState ?? "unknown");
     const pedestrianState = coercePedestrianState(parsed.pedestrianState ?? "unknown");
+    const drivingEnvironment = coerceDrivingEnvironment(parsed.drivingEnvironment ?? "unknown");
+    const environmentSummary =
+      (parsed.environmentSummary ?? "주행 환경 판별 결과 없음").trim() || "주행 환경 판별 결과 없음";
     const confidence = Math.min(1, Math.max(0, Number(parsed.confidence ?? 0)));
     const summary = (parsed.summary ?? "신호 판별 결과 없음").trim() || "신호 판별 결과 없음";
     const prioritySummary = buildPrioritySummary(
@@ -244,6 +273,9 @@ export const trafficSignalRouter = router({
       priorityModeLabel: PRIORITY_MODE_LABELS[input.priorityMode],
       sensitivityMode: input.sensitivityMode,
       sensitivityLabel: SENSITIVITY_LABELS[input.sensitivityMode],
+      drivingEnvironment,
+      drivingEnvironmentLabel: ENVIRONMENT_LABELS[drivingEnvironment],
+      environmentSummary,
     } as const;
   }),
 });

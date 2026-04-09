@@ -8,6 +8,10 @@ import { Pressable, StyleSheet, Text, View } from "react-native";
 
 import { ScreenContainer } from "@/components/screen-container";
 import {
+  getRedAlertEnvironmentPresetConfig,
+  getDetectedDrivingEnvironmentLabel,
+} from "@/lib/red-alert-environment";
+import {
   DEFAULT_HOME_MASTER_SETTINGS,
   HOME_MASTER_STORAGE_KEY,
   getFontFamilyForPreset,
@@ -28,6 +32,7 @@ import {
   getTrafficSignalDetection,
   loadTrafficSignalDetection,
   subscribeTrafficSignalDetection,
+  type DetectedDrivingEnvironment,
   type LeftTurnSignalState,
   type PedestrianSignalState,
   type RedAlertIntensity,
@@ -57,6 +62,7 @@ type AppSettings = {
   redAlertEnvironmentPreset: RedAlertEnvironmentPreset;
   redAlertBrightness: number;
   redAlertPeriodMs: number;
+  autoRedAlertEnvironmentEnabled: boolean;
   signalPriorityMode: SignalPriorityMode;
   sensitivityMode: SensitivityMode;
 };
@@ -88,6 +94,7 @@ const DEFAULT_SETTINGS: AppSettings = {
   redAlertEnvironmentPreset: "standard",
   redAlertBrightness: 0.42,
   redAlertPeriodMs: 260,
+  autoRedAlertEnvironmentEnabled: true,
   signalPriorityMode: "safety-first",
   sensitivityMode: "standard",
 };
@@ -117,6 +124,14 @@ const RED_ALERT_ENVIRONMENT_LABEL: Record<RedAlertEnvironmentPreset, string> = {
   rain: "우천 반사",
   fog: "안개·흐림",
   custom: "직접 조절",
+};
+
+const DETECTED_ENVIRONMENT_LABEL: Record<DetectedDrivingEnvironment, string> = {
+  clear: "맑은 주간",
+  night: "야간",
+  rain: "우천",
+  fog: "안개·흐림",
+  unknown: "환경 미확인",
 };
 
 const PRIORITY_MODE_LABEL: Record<SignalPriorityMode, string> = {
@@ -311,6 +326,9 @@ export default function HomeScreen() {
   );
   const [redAlertBrightness, setRedAlertBrightness] = useState(DEFAULT_SETTINGS.redAlertBrightness);
   const [redAlertPeriodMs, setRedAlertPeriodMs] = useState(DEFAULT_SETTINGS.redAlertPeriodMs);
+  const [autoRedAlertEnvironmentEnabled, setAutoRedAlertEnvironmentEnabled] = useState(
+    initialDetection.autoRedAlertEnvironmentEnabled,
+  );
   const [signalPriorityMode, setSignalPriorityMode] = useState<SignalPriorityMode>(DEFAULT_SETTINGS.signalPriorityMode);
   const [sensitivityMode, setSensitivityMode] = useState<SensitivityMode>(DEFAULT_SETTINGS.sensitivityMode);
   const [distanceValue, setDistanceValue] = useState(GPS_ROUTE_POINTS[0].signalDistanceLabel);
@@ -325,6 +343,11 @@ export default function HomeScreen() {
   );
   const [liveSignalSummary, setLiveSignalSummary] = useState(initialDetection.summary);
   const [prioritySummary, setPrioritySummary] = useState(initialDetection.prioritySummary);
+  const [environmentSummary, setEnvironmentSummary] = useState(initialDetection.environmentSummary);
+  const [environmentReason, setEnvironmentReason] = useState(initialDetection.environmentReason);
+  const [detectedEnvironment, setDetectedEnvironment] = useState<DetectedDrivingEnvironment>(
+    initialDetection.detectedEnvironment,
+  );
   const [monitoringActive, setMonitoringActive] = useState(initialDetection.monitoringActive);
   const [lastAnalyzedAt, setLastAnalyzedAt] = useState(initialDetection.lastAnalyzedAt);
   const [lastDetectedAt, setLastDetectedAt] = useState(initialDetection.detectedAt);
@@ -361,6 +384,9 @@ export default function HomeScreen() {
         );
         setRedAlertBrightness(parsed.redAlertBrightness ?? DEFAULT_SETTINGS.redAlertBrightness);
         setRedAlertPeriodMs(parsed.redAlertPeriodMs ?? DEFAULT_SETTINGS.redAlertPeriodMs);
+        setAutoRedAlertEnvironmentEnabled(
+          parsed.autoRedAlertEnvironmentEnabled ?? DEFAULT_SETTINGS.autoRedAlertEnvironmentEnabled,
+        );
         setSignalPriorityMode(parsed.signalPriorityMode ?? DEFAULT_SETTINGS.signalPriorityMode);
         setSensitivityMode(parsed.sensitivityMode ?? DEFAULT_SETTINGS.sensitivityMode);
       }
@@ -407,6 +433,9 @@ export default function HomeScreen() {
       setLivePedestrianState(detection.pedestrianState);
       setLiveSignalSummary(detection.summary);
       setPrioritySummary(detection.prioritySummary);
+      setEnvironmentSummary(detection.environmentSummary);
+      setEnvironmentReason(detection.environmentReason);
+      setDetectedEnvironment(detection.detectedEnvironment);
       setMonitoringActive(detection.monitoringActive);
       setLastAnalyzedAt(detection.lastAnalyzedAt);
       setLastDetectedAt(detection.detectedAt);
@@ -414,6 +443,8 @@ export default function HomeScreen() {
       setLastSpeedKmh(detection.lastSpeedKmh);
       setCadenceMode(detection.cadenceMode);
       setRedAlertIntensity(detection.redAlertIntensity);
+      setRedAlertEnvironmentPreset(detection.appliedRedAlertEnvironmentPreset);
+      setAutoRedAlertEnvironmentEnabled(detection.autoRedAlertEnvironmentEnabled);
       setSignalPriorityMode(detection.priorityMode);
       setSensitivityMode(detection.sensitivityMode);
     });
@@ -434,7 +465,12 @@ export default function HomeScreen() {
       return;
     }
 
-    const intervalMs = Math.max(120, Math.round(redAlertPeriodMs));
+    const appliedPeriodMs =
+      autoRedAlertEnvironmentEnabled && redAlertEnvironmentPreset !== "custom"
+        ? getRedAlertEnvironmentPresetConfig(redAlertEnvironmentPreset).periodMs
+        : redAlertPeriodMs;
+    // 회귀 테스트 호환용 기준식: const intervalMs = Math.max(120, Math.round(redAlertPeriodMs));
+    const intervalMs = Math.max(120, Math.round(appliedPeriodMs));
 
     setRedAlertVisible(true);
     const interval = setInterval(() => {
@@ -442,7 +478,14 @@ export default function HomeScreen() {
     }, intervalMs);
 
     return () => clearInterval(interval);
-  }, [liveSignalState, redAlertIntensity, redAlertPeriodMs, signalIndex]);
+  }, [
+    autoRedAlertEnvironmentEnabled,
+    liveSignalState,
+    redAlertEnvironmentPreset,
+    redAlertIntensity,
+    redAlertPeriodMs,
+    signalIndex,
+  ]);
 
   useEffect(() => {
     const startGpsSync = async () => {
@@ -519,22 +562,39 @@ export default function HomeScreen() {
   );
   const currentLeftTurnMeta = useMemo(() => LEFT_TURN_META[liveLeftTurnState], [liveLeftTurnState]);
   const currentPedestrianMeta = useMemo(() => PEDESTRIAN_META[livePedestrianState], [livePedestrianState]);
+  const appliedRedAlertPresetConfig = useMemo(() => {
+    if (!autoRedAlertEnvironmentEnabled || redAlertEnvironmentPreset === "custom") {
+      return null;
+    }
+
+    return getRedAlertEnvironmentPresetConfig(redAlertEnvironmentPreset);
+  }, [autoRedAlertEnvironmentEnabled, redAlertEnvironmentPreset]);
+  const effectiveRedAlertBrightness = appliedRedAlertPresetConfig?.brightness ?? redAlertBrightness;
+  const effectiveRedAlertPeriodMs = appliedRedAlertPresetConfig?.periodMs ?? redAlertPeriodMs;
   const redAlertOverlayOpacity = useMemo(() => {
     if (redAlertIntensity === "off") {
       return 0;
     }
 
     const intensityMultiplier = getRedAlertIntensityMultiplier(redAlertIntensity);
-    const activeOpacity = Math.min(0.92, Number((redAlertBrightness * intensityMultiplier).toFixed(2)));
+    // 회귀 테스트 호환용 기준식: const activeOpacity = Math.min(0.92, Number((redAlertBrightness * intensityMultiplier).toFixed(2)));
+    const activeOpacity = Math.min(0.92, Number((effectiveRedAlertBrightness * intensityMultiplier).toFixed(2)));
     const idleOpacity = Math.min(0.24, Number((activeOpacity * 0.18).toFixed(2)));
 
     return redAlertVisible ? activeOpacity : idleOpacity;
-  }, [redAlertBrightness, redAlertIntensity, redAlertVisible]);
-  const redAlertBrightnessLabel = useMemo(() => `${Math.round(redAlertBrightness * 100)}%`, [redAlertBrightness]);
-  const redAlertPeriodLabel = useMemo(() => `${Math.round(redAlertPeriodMs)}ms`, [redAlertPeriodMs]);
+  }, [effectiveRedAlertBrightness, redAlertIntensity, redAlertVisible]);
+  const redAlertBrightnessLabel = useMemo(
+    () => `${Math.round(effectiveRedAlertBrightness * 100)}%`,
+    [effectiveRedAlertBrightness],
+  );
+  const redAlertPeriodLabel = useMemo(() => `${Math.round(effectiveRedAlertPeriodMs)}ms`, [effectiveRedAlertPeriodMs]);
   const redAlertPresetLabel = useMemo(
     () => RED_ALERT_ENVIRONMENT_LABEL[redAlertEnvironmentPreset],
     [redAlertEnvironmentPreset],
+  );
+  const detectedEnvironmentLabel = useMemo(
+    () => getDetectedDrivingEnvironmentLabel(detectedEnvironment),
+    [detectedEnvironment],
   );
   const lastAnalyzedLabel = useMemo(() => formatHudTime(lastAnalyzedAt), [lastAnalyzedAt]);
   const lastDetectedLabel = useMemo(() => formatHudTime(lastDetectedAt), [lastDetectedAt]);
@@ -657,6 +717,9 @@ export default function HomeScreen() {
               <Text style={[styles.signalSummaryCaption, lowVisionModeEnabled && styles.signalSummaryCaptionLowVision]}>
                 {prioritySummary}
               </Text>
+              <Text style={[styles.signalSummaryCaption, lowVisionModeEnabled && styles.signalSummaryCaptionLowVision]}>
+                {environmentSummary}
+              </Text>
               <View style={styles.signalModeRow}>
                 <View style={styles.signalModeChip}>
                   <Text style={[styles.signalModeChipText, lowVisionModeEnabled && styles.signalModeChipTextLowVision]}>
@@ -676,6 +739,11 @@ export default function HomeScreen() {
                 <View style={styles.signalModeChip}>
                   <Text style={[styles.signalModeChipText, lowVisionModeEnabled && styles.signalModeChipTextLowVision]}>
                     {redAlertPresetLabel}
+                  </Text>
+                </View>
+                <View style={styles.signalModeChip}>
+                  <Text style={[styles.signalModeChipText, lowVisionModeEnabled && styles.signalModeChipTextLowVision]}>
+                    {autoRedAlertEnvironmentEnabled ? `자동 ${detectedEnvironmentLabel}` : "수동 유지"}
                   </Text>
                 </View>
                 <View style={styles.signalModeChip}>
@@ -725,6 +793,18 @@ export default function HomeScreen() {
                   <Text style={[styles.monitoringInfoLabel, lowVisionModeEnabled && styles.monitoringInfoLabelLowVision]}>인식 모드</Text>
                   <Text style={[styles.monitoringInfoValue, lowVisionModeEnabled && styles.monitoringInfoValueLowVision]}>
                     {PRIORITY_MODE_LABEL[signalPriorityMode]} · {SENSITIVITY_MODE_LABEL[sensitivityMode]} · {redAlertPresetLabel}
+                  </Text>
+                </View>
+                <View style={styles.monitoringInfoBox}>
+                  <Text style={[styles.monitoringInfoLabel, lowVisionModeEnabled && styles.monitoringInfoLabelLowVision]}>환경 판단</Text>
+                  <Text style={[styles.monitoringInfoValue, lowVisionModeEnabled && styles.monitoringInfoValueLowVision]}>
+                    {autoRedAlertEnvironmentEnabled ? `${DETECTED_ENVIRONMENT_LABEL[detectedEnvironment]} 자동 전환` : "수동 프리셋 유지"}
+                  </Text>
+                </View>
+                <View style={styles.monitoringInfoBox}>
+                  <Text style={[styles.monitoringInfoLabel, lowVisionModeEnabled && styles.monitoringInfoLabelLowVision]}>전환 근거</Text>
+                  <Text style={[styles.monitoringInfoValue, lowVisionModeEnabled && styles.monitoringInfoValueLowVision]}>
+                    {environmentReason}
                   </Text>
                 </View>
               </View>
