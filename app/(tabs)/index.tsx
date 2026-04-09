@@ -386,7 +386,7 @@ export default function HomeScreen() {
     const translateY = key === "signal"
       ? Math.min(rawTranslateY, 0)
       : key === "speed"
-        ? Math.max(rawTranslateY, 16)
+        ? Math.max(rawTranslateY, 32)
         : rawTranslateY;
 
     return {
@@ -638,7 +638,7 @@ const styles = StyleSheet.create({
   },
   mainStack: {
     flex: 1,
-    gap: 14,
+    gap: 18,
     paddingTop: 10,
     paddingBottom: 20,
   },
@@ -655,10 +655,11 @@ const styles = StyleSheet.create({
     elevation: 0,
   },
   signalShell: {
-    flex: 0.6,
+    flex: 0.5,
   },
   infoShell: {
-    flex: 0.3,
+    flex: 0.24,
+    marginTop: 10,
   },
   pressedCardShell: {
     opacity: 0.94,
@@ -666,12 +667,12 @@ const styles = StyleSheet.create({
   },
   signalCard: {
     flex: 1,
-    minHeight: 164,
+    minHeight: 148,
     borderRadius: 20,
     alignItems: "center",
     justifyContent: "flex-start",
     paddingTop: 12,
-    paddingBottom: 12,
+    paddingBottom: 8,
     borderWidth: 1,
     borderColor: "rgba(236, 241, 244, 0.9)",
     shadowOpacity: 0.18,
@@ -699,12 +700,12 @@ const styles = StyleSheet.create({
     letterSpacing: -2.6,
   },
   signalDistanceSpacer: {
-    height: 76,
-    marginTop: 20,
+    height: 18,
+    marginTop: 8,
   },
   infoCard: {
     flex: 1,
-    minHeight: 86,
+    minHeight: 94,
     borderRadius: 20,
     backgroundColor: "#D0D3D9",
     borderWidth: 1,

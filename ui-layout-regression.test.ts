@@ -24,7 +24,7 @@ describe("home hud layout regression", () => {
     expect(homeSource).toContain('title: "GO"');
     expect(homeSource).toContain('title: "SLOW"');
     expect(homeSource).toContain('title: "STOP"');
-    expect(homeSource).toContain('minHeight: 164');
+    expect(homeSource).toContain('minHeight: 148');
     expect(homeSource).toContain('paddingTop: 12');
     expect(homeSource).toContain('marginTop: 24');
     expect(homeSource).toContain('fontSize: 74');
@@ -36,12 +36,18 @@ describe("home hud layout regression", () => {
     expect(homeSource).toContain('displayedDistanceValue = isSignalInactive ? "--" : distanceValue');
     expect(homeSource).toContain('isSignalInactive ? <View style={styles.signalDistanceSpacer} />');
     expect(homeSource).toContain('signalDistanceSpacer');
+    expect(homeSource).toContain('height: 18');
+    expect(homeSource).toContain('marginTop: 8');
     expect(homeSource).toContain('현재 속도');
     expect(homeSource).toContain('speedOnlyColumn');
     expect(homeSource).toContain('speedOnlyValue');
-    expect(homeSource).toContain('minHeight: 86');
+    expect(homeSource).toContain('minHeight: 94');
     expect(homeSource).toContain('paddingVertical: 8');
     expect(homeSource).toContain('gap: 4');
+    expect(homeSource).toContain('Math.max(rawTranslateY, 32)');
+    expect(homeSource).toContain('gap: 18');
+    expect(homeSource).toContain('flex: 0.5');
+    expect(homeSource).toContain('flex: 0.24');
     expect(homeSource).toContain(': "0 km/h";');
     expect(homeSource).not.toContain('metricDivider');
     expect(homeSource).not.toContain('남은 거리');
