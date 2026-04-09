@@ -50,6 +50,9 @@ type AppSettings = {
   voiceAlertLength: VoiceAlertLength;
   voiceAlertStyle: VoiceAlertStyle;
   liveRouteSyncEnabled: boolean;
+  adaptiveScanEnabled: boolean;
+  hapticAlertsEnabled: boolean;
+  lowVisionModeEnabled: boolean;
   selectedNavigationProvider: NavigationProvider;
   arrowSize: ArrowSize;
   quickDestinations: string[];
@@ -66,6 +69,9 @@ const DEFAULT_SETTINGS: AppSettings = {
   voiceAlertLength: DEFAULT_VOICE_ALERT_SETTINGS.length,
   voiceAlertStyle: DEFAULT_VOICE_ALERT_SETTINGS.style,
   liveRouteSyncEnabled: true,
+  adaptiveScanEnabled: true,
+  hapticAlertsEnabled: true,
+  lowVisionModeEnabled: true,
   selectedNavigationProvider: "tmap",
   arrowSize: "huge",
   quickDestinations: ["집", "회사"],
@@ -232,6 +238,9 @@ export default function SettingsScreen() {
     DEFAULT_SETTINGS.voiceAlertStyle,
   );
   const [liveRouteSyncEnabled, setLiveRouteSyncEnabled] = useState(DEFAULT_SETTINGS.liveRouteSyncEnabled);
+  const [adaptiveScanEnabled, setAdaptiveScanEnabled] = useState(DEFAULT_SETTINGS.adaptiveScanEnabled);
+  const [hapticAlertsEnabled, setHapticAlertsEnabled] = useState(DEFAULT_SETTINGS.hapticAlertsEnabled);
+  const [lowVisionModeEnabled, setLowVisionModeEnabled] = useState(DEFAULT_SETTINGS.lowVisionModeEnabled);
   const [selectedNavigationProvider, setSelectedNavigationProvider] = useState<NavigationProvider>(
     DEFAULT_SETTINGS.selectedNavigationProvider,
   );
@@ -266,6 +275,9 @@ export default function SettingsScreen() {
           setVoiceAlertLength(parsed.voiceAlertLength ?? DEFAULT_SETTINGS.voiceAlertLength);
           setVoiceAlertStyle(parsed.voiceAlertStyle ?? DEFAULT_SETTINGS.voiceAlertStyle);
           setLiveRouteSyncEnabled(parsed.liveRouteSyncEnabled ?? DEFAULT_SETTINGS.liveRouteSyncEnabled);
+          setAdaptiveScanEnabled(parsed.adaptiveScanEnabled ?? DEFAULT_SETTINGS.adaptiveScanEnabled);
+          setHapticAlertsEnabled(parsed.hapticAlertsEnabled ?? DEFAULT_SETTINGS.hapticAlertsEnabled);
+          setLowVisionModeEnabled(parsed.lowVisionModeEnabled ?? DEFAULT_SETTINGS.lowVisionModeEnabled);
           setSelectedNavigationProvider(
             parsed.selectedNavigationProvider ?? DEFAULT_SETTINGS.selectedNavigationProvider,
           );
@@ -505,6 +517,9 @@ export default function SettingsScreen() {
       voiceAlertLength,
       voiceAlertStyle,
       liveRouteSyncEnabled,
+      adaptiveScanEnabled,
+      hapticAlertsEnabled,
+      lowVisionModeEnabled,
       selectedNavigationProvider,
       arrowSize,
       quickDestinations,
@@ -662,6 +677,36 @@ export default function SettingsScreen() {
             </View>
             <Text style={styles.sectionDescription}>
               현재 위치와 외부 내비게이션 경로 흐름을 기준으로 화살표를 전환합니다.
+            </Text>
+          </View>
+
+          <View style={styles.sectionCard}>
+            <View style={styles.sectionHeaderRow}>
+              <Text style={styles.sectionTitle}>속도 적응 스캔</Text>
+              <Switch value={adaptiveScanEnabled} onValueChange={setAdaptiveScanEnabled} />
+            </View>
+            <Text style={styles.sectionDescription}>
+              차량 속도에 따라 신호 인식 간격을 자동으로 조절해 반응성과 배터리 소모를 함께 맞춥니다.
+            </Text>
+          </View>
+
+          <View style={styles.sectionCard}>
+            <View style={styles.sectionHeaderRow}>
+              <Text style={styles.sectionTitle}>진동 패턴 경고</Text>
+              <Switch value={hapticAlertsEnabled} onValueChange={setHapticAlertsEnabled} />
+            </View>
+            <Text style={styles.sectionDescription}>
+              적색, 좌회전 가능, 보행 가능 상태를 서로 다른 진동 패턴으로 구분해 화면을 보지 않아도 알 수 있게 합니다.
+            </Text>
+          </View>
+
+          <View style={styles.sectionCard}>
+            <View style={styles.sectionHeaderRow}>
+              <Text style={styles.sectionTitle}>초대형 저시력 모드</Text>
+              <Switch value={lowVisionModeEnabled} onValueChange={setLowVisionModeEnabled} />
+            </View>
+            <Text style={styles.sectionDescription}>
+              홈 HUD와 카메라 화면의 핵심 신호 문구와 상태 칩을 더 크게 키워 저시력 환경에서도 빠르게 읽도록 돕습니다.
             </Text>
           </View>
 

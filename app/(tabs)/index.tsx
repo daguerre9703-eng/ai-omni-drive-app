@@ -46,6 +46,9 @@ type AppSettings = {
   selectedNavigationProvider: NavigationProvider;
   arrowSize: ArrowSize;
   liveRouteSyncEnabled: boolean;
+  adaptiveScanEnabled: boolean;
+  hapticAlertsEnabled: boolean;
+  lowVisionModeEnabled: boolean;
 };
 
 type RoutePoint = {
@@ -68,6 +71,9 @@ const DEFAULT_SETTINGS: AppSettings = {
   selectedNavigationProvider: "tmap",
   arrowSize: "huge",
   liveRouteSyncEnabled: true,
+  adaptiveScanEnabled: true,
+  hapticAlertsEnabled: true,
+  lowVisionModeEnabled: true,
 };
 
 const PROVIDER_LABEL: Record<NavigationProvider, string> = {
@@ -236,6 +242,9 @@ export default function HomeScreen() {
   );
   const [arrowSize, setArrowSize] = useState<ArrowSize>(DEFAULT_SETTINGS.arrowSize);
   const [liveRouteSyncEnabled, setLiveRouteSyncEnabled] = useState(DEFAULT_SETTINGS.liveRouteSyncEnabled);
+  const [adaptiveScanEnabled, setAdaptiveScanEnabled] = useState(DEFAULT_SETTINGS.adaptiveScanEnabled);
+  const [hapticAlertsEnabled, setHapticAlertsEnabled] = useState(DEFAULT_SETTINGS.hapticAlertsEnabled);
+  const [lowVisionModeEnabled, setLowVisionModeEnabled] = useState(DEFAULT_SETTINGS.lowVisionModeEnabled);
   const [distanceValue, setDistanceValue] = useState(GPS_ROUTE_POINTS[0].signalDistanceLabel);
   const [speedValue, setSpeedValue] = useState(GPS_ROUTE_POINTS[0].fallbackSpeedLabel);
   const [redAlertVisible, setRedAlertVisible] = useState(false);
@@ -250,6 +259,9 @@ export default function HomeScreen() {
   const [monitoringActive, setMonitoringActive] = useState(initialDetection.monitoringActive);
   const [lastAnalyzedAt, setLastAnalyzedAt] = useState(initialDetection.lastAnalyzedAt);
   const [lastDetectedAt, setLastDetectedAt] = useState(initialDetection.detectedAt);
+  const [scanIntervalMs, setScanIntervalMs] = useState(initialDetection.scanIntervalMs);
+  const [lastSpeedKmh, setLastSpeedKmh] = useState(initialDetection.lastSpeedKmh);
+  const [cadenceMode, setCadenceMode] = useState(initialDetection.cadenceMode);
   const [homeMasterSettings, setHomeMasterSettings] = useState<HomeMasterSettings>(DEFAULT_HOME_MASTER_SETTINGS);
   const routeIndexRef = useRef(0);
   const locationSubscriptionRef = useRef<Location.LocationSubscription | null>(null);
@@ -271,6 +283,9 @@ export default function HomeScreen() {
         );
         setArrowSize(parsed.arrowSize ?? DEFAULT_SETTINGS.arrowSize);
         setLiveRouteSyncEnabled(parsed.liveRouteSyncEnabled ?? DEFAULT_SETTINGS.liveRouteSyncEnabled);
+        setAdaptiveScanEnabled(parsed.adaptiveScanEnabled ?? DEFAULT_SETTINGS.adaptiveScanEnabled);
+        setHapticAlertsEnabled(parsed.hapticAlertsEnabled ?? DEFAULT_SETTINGS.hapticAlertsEnabled);
+        setLowVisionModeEnabled(parsed.lowVisionModeEnabled ?? DEFAULT_SETTINGS.lowVisionModeEnabled);
       }
 
       if (savedHomeMasterValue) {
@@ -317,6 +332,9 @@ export default function HomeScreen() {
       setMonitoringActive(detection.monitoringActive);
       setLastAnalyzedAt(detection.lastAnalyzedAt);
       setLastDetectedAt(detection.detectedAt);
+      setScanIntervalMs(detection.scanIntervalMs);
+      setLastSpeedKmh(detection.lastSpeedKmh);
+      setCadenceMode(detection.cadenceMode);
     });
 
     loadTrafficSignalDetection().catch((error) => {
@@ -468,8 +486,10 @@ export default function HomeScreen() {
           />
         ) : null}
         <View style={styles.topBar}>
-          <View style={styles.providerPill}>
-            <Text style={styles.providerText}>{PROVIDER_LABEL[selectedNavigationProvider]}</Text>
+          <View style={[styles.providerPill, lowVisionModeEnabled && styles.providerPillLowVision]}>
+            <Text style={[styles.providerText, lowVisionModeEnabled && styles.providerTextLowVision]}>
+              {PROVIDER_LABEL[selectedNavigationProvider]}
+            </Text>
           </View>
         </View>
 
@@ -489,9 +509,14 @@ export default function HomeScreen() {
               <Text
                 style={[
                   styles.signalTitle,
+                  lowVisionModeEnabled && styles.signalTitleLowVision,
                   {
-                    fontSize: homeMasterSettings.sizes.signalTitle,
-                    lineHeight: homeMasterSettings.sizes.signalTitle + 4,
+                    fontSize: lowVisionModeEnabled
+                      ? Math.round(homeMasterSettings.sizes.signalTitle * 1.18)
+                      : homeMasterSettings.sizes.signalTitle,
+                    lineHeight: lowVisionModeEnabled
+                      ? Math.round(homeMasterSettings.sizes.signalTitle * 1.18) + 6
+                      : homeMasterSettings.sizes.signalTitle + 4,
                     fontFamily: sharedFontFamily,
                     fontWeight: sharedFontWeight,
                   },
@@ -502,9 +527,14 @@ export default function HomeScreen() {
               <Text
                 style={[
                   styles.signalDistanceValue,
+                  lowVisionModeEnabled && styles.signalDistanceValueLowVision,
                   {
-                    fontSize: homeMasterSettings.sizes.distanceValue,
-                    lineHeight: homeMasterSettings.sizes.distanceValue + 4,
+                    fontSize: lowVisionModeEnabled
+                      ? Math.round(homeMasterSettings.sizes.distanceValue * 1.16)
+                      : homeMasterSettings.sizes.distanceValue,
+                    lineHeight: lowVisionModeEnabled
+                      ? Math.round(homeMasterSettings.sizes.distanceValue * 1.16) + 6
+                      : homeMasterSettings.sizes.distanceValue + 4,
                     fontFamily: sharedFontFamily,
                     fontWeight: sharedFontWeight,
                   },
@@ -514,12 +544,12 @@ export default function HomeScreen() {
               </Text>
               <View style={styles.signalAssistRow}>
                 <View style={[styles.signalAssistChip, { backgroundColor: currentLeftTurnMeta.backgroundColor }]}> 
-                  <Text style={[styles.signalAssistText, { color: currentLeftTurnMeta.textColor }]}> 
+                  <Text style={[styles.signalAssistText, lowVisionModeEnabled && styles.signalAssistTextLowVision, { color: currentLeftTurnMeta.textColor }]}> 
                     {currentLeftTurnMeta.label}
                   </Text>
                 </View>
                 <View style={[styles.signalAssistChip, { backgroundColor: currentPedestrianMeta.backgroundColor }]}> 
-                  <Text style={[styles.signalAssistText, { color: currentPedestrianMeta.textColor }]}> 
+                  <Text style={[styles.signalAssistText, lowVisionModeEnabled && styles.signalAssistTextLowVision, { color: currentPedestrianMeta.textColor }]}> 
                     {currentPedestrianMeta.label}
                   </Text>
                 </View>
@@ -541,8 +571,20 @@ export default function HomeScreen() {
                   <Text style={styles.monitoringInfoValue}>{lastAnalyzedLabel}</Text>
                 </View>
                 <View style={styles.monitoringInfoBox}>
-                  <Text style={styles.monitoringInfoLabel}>최근 감지</Text>
-                  <Text style={styles.monitoringInfoValue}>{lastDetectedLabel}</Text>
+                  <Text style={[styles.monitoringInfoLabel, lowVisionModeEnabled && styles.monitoringInfoLabelLowVision]}>최근 감지</Text>
+                  <Text style={[styles.monitoringInfoValue, lowVisionModeEnabled && styles.monitoringInfoValueLowVision]}>{lastDetectedLabel}</Text>
+                </View>
+                <View style={styles.monitoringInfoBox}>
+                  <Text style={[styles.monitoringInfoLabel, lowVisionModeEnabled && styles.monitoringInfoLabelLowVision]}>스캔 정보</Text>
+                  <Text style={[styles.monitoringInfoValue, lowVisionModeEnabled && styles.monitoringInfoValueLowVision]}>
+                    {adaptiveScanEnabled ? `${Math.round(lastSpeedKmh)}km/h · ${(scanIntervalMs / 1000).toFixed(1)}초` : `고정 ${(scanIntervalMs / 1000).toFixed(1)}초`}
+                  </Text>
+                </View>
+                <View style={styles.monitoringInfoBox}>
+                  <Text style={[styles.monitoringInfoLabel, lowVisionModeEnabled && styles.monitoringInfoLabelLowVision]}>보조 기능</Text>
+                  <Text style={[styles.monitoringInfoValue, lowVisionModeEnabled && styles.monitoringInfoValueLowVision]}>
+                    {hapticAlertsEnabled ? `진동 ${cadenceMode}` : `무진동 ${cadenceMode}`}
+                  </Text>
                 </View>
               </View>
             </View>
@@ -566,9 +608,14 @@ export default function HomeScreen() {
                 <Text
                   style={[
                     styles.speedOnlyValue,
+                    lowVisionModeEnabled && styles.speedOnlyValueLowVision,
                     {
-                      fontSize: homeMasterSettings.sizes.speedValue,
-                      lineHeight: homeMasterSettings.sizes.speedValue + 4,
+                      fontSize: lowVisionModeEnabled
+                        ? Math.round(homeMasterSettings.sizes.speedValue * 1.14)
+                        : homeMasterSettings.sizes.speedValue,
+                      lineHeight: lowVisionModeEnabled
+                        ? Math.round(homeMasterSettings.sizes.speedValue * 1.14) + 6
+                        : homeMasterSettings.sizes.speedValue + 4,
                       fontFamily: sharedFontFamily,
                       fontWeight: sharedFontWeight,
                     },
@@ -619,7 +666,7 @@ export default function HomeScreen() {
               style={({ pressed }) => [styles.bottomButton, pressed && styles.bottomButtonPressed]}
             >
               <MaterialIcons name="photo-camera" size={24} color="#1E2630" />
-              <Text style={styles.bottomButtonText}>카메라</Text>
+              <Text style={[styles.bottomButtonText, lowVisionModeEnabled && styles.bottomButtonTextLowVision]}>카메라</Text>
             </Pressable>
 
             <Pressable
@@ -628,7 +675,7 @@ export default function HomeScreen() {
               style={({ pressed }) => [styles.bottomButton, pressed && styles.bottomButtonPressed]}
             >
               <MaterialIcons name="home" size={24} color="#1E2630" />
-              <Text style={styles.bottomButtonText}>홈</Text>
+              <Text style={[styles.bottomButtonText, lowVisionModeEnabled && styles.bottomButtonTextLowVision]}>홈</Text>
             </Pressable>
 
             <Pressable
@@ -637,7 +684,7 @@ export default function HomeScreen() {
               style={({ pressed }) => [styles.bottomButton, pressed && styles.bottomButtonPressed]}
             >
               <MaterialIcons name="settings" size={24} color="#1E2630" />
-              <Text style={styles.bottomButtonText}>설정</Text>
+              <Text style={[styles.bottomButtonText, lowVisionModeEnabled && styles.bottomButtonTextLowVision]}>설정</Text>
             </Pressable>
           </View>
         </View>
@@ -689,12 +736,21 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 2 },
     elevation: 2,
   },
+  providerPillLowVision: {
+    minWidth: 110,
+    paddingHorizontal: 18,
+    paddingVertical: 8,
+  },
   providerText: {
     textAlign: "center",
     fontSize: 12,
     lineHeight: 14,
     fontWeight: "800",
     color: "#4F5661",
+  },
+  providerTextLowVision: {
+    fontSize: 16,
+    lineHeight: 20,
   },
   mainStack: {
     flex: 1,
@@ -749,6 +805,10 @@ const styles = StyleSheet.create({
     textShadowOffset: { width: 0, height: 2 },
     textShadowRadius: 3,
   },
+  signalTitleLowVision: {
+    marginTop: 4,
+    letterSpacing: -0.6,
+  },
   signalDistanceValue: {
     marginTop: 54,
     fontSize: 74,
@@ -757,6 +817,10 @@ const styles = StyleSheet.create({
     color: "#111111",
     textAlign: "center",
     letterSpacing: -2.6,
+  },
+  signalDistanceValueLowVision: {
+    marginTop: 34,
+    letterSpacing: -1.8,
   },
   signalAssistRow: {
     marginTop: 16,
@@ -779,6 +843,10 @@ const styles = StyleSheet.create({
     fontWeight: "900",
     textAlign: "center",
     letterSpacing: -0.2,
+  },
+  signalAssistTextLowVision: {
+    fontSize: 20,
+    lineHeight: 24,
   },
   monitoringRow: {
     marginTop: 12,
@@ -824,12 +892,20 @@ const styles = StyleSheet.create({
     fontWeight: "800",
     color: "rgba(255, 255, 255, 0.78)",
   },
+  monitoringInfoLabelLowVision: {
+    fontSize: 17,
+    lineHeight: 20,
+  },
   monitoringInfoValue: {
     marginTop: 2,
     fontSize: 18,
     lineHeight: 21,
     fontWeight: "900",
     color: "#F8FAFC",
+  },
+  monitoringInfoValueLowVision: {
+    fontSize: 22,
+    lineHeight: 28,
   },
   infoCard: {
     flex: 1,
@@ -871,6 +947,9 @@ const styles = StyleSheet.create({
     color: "#1C2430",
     textAlign: "center",
     letterSpacing: -1.2,
+  },
+  speedOnlyValueLowVision: {
+    letterSpacing: -0.8,
   },
   directionShell: {
     flex: 1.34,
@@ -957,5 +1036,9 @@ const styles = StyleSheet.create({
     fontWeight: "900",
     color: "#27303B",
     letterSpacing: -0.3,
+  },
+  bottomButtonTextLowVision: {
+    fontSize: 21,
+    lineHeight: 24,
   },
 });

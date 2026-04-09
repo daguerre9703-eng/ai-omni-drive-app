@@ -88,8 +88,9 @@ describe("home master settings regression", () => {
     expect(homeSource).toContain('shellTransform("signal")');
     expect(homeSource).toContain('shellTransform("speed")');
     expect(homeSource).toContain('shellTransform("direction")');
-    expect(homeSource).toContain("fontSize: homeMasterSettings.sizes.distanceValue");
-    expect(homeSource).toContain("fontSize: homeMasterSettings.sizes.speedValue");
+    expect(homeSource).toContain("fontSize: lowVisionModeEnabled");
+    expect(homeSource).toContain("homeMasterSettings.sizes.distanceValue");
+    expect(homeSource).toContain("homeMasterSettings.sizes.speedValue");
     expect(homeSource).toContain("homeMasterSettings.sizes.directionArrow");
     expect(homeSource).toContain("dynamicSignalGlow");
     expect(homeSource).toContain("getSignalGlowOpacity(0.54, homeMasterSettings.signalGlow.red)");

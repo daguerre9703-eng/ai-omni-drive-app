@@ -1,5 +1,8 @@
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import MaterialIcons from "@expo/vector-icons/MaterialIcons";
 import { CameraView, useCameraPermissions } from "expo-camera";
+import * as Haptics from "expo-haptics";
+import * as Location from "expo-location";
 import { router } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -15,6 +18,7 @@ import {
 import { ScreenContainer } from "@/components/screen-container";
 import { trpc } from "@/lib/trpc";
 import {
+  DEFAULT_TRAFFIC_SIGNAL_DETECTION,
   getTrafficSignalDetection,
   type DetectionRange,
   setTrafficSignalDetection,
@@ -30,6 +34,25 @@ type DetectionRangeOption = {
   description: string;
   frameWidth: number;
   frameHeight: number;
+};
+
+type CameraSettings = {
+  adaptiveScanEnabled: boolean;
+  hapticAlertsEnabled: boolean;
+  lowVisionModeEnabled: boolean;
+};
+
+type ScanProfile = {
+  intervalMs: number;
+  cadenceMode: "slow" | "normal" | "fast";
+  label: string;
+};
+
+const SETTINGS_STORAGE_KEY = "ai-omni-drive:settings";
+const DEFAULT_CAMERA_SETTINGS: CameraSettings = {
+  adaptiveScanEnabled: true,
+  hapticAlertsEnabled: true,
+  lowVisionModeEnabled: true,
 };
 
 const RANGE_OPTIONS: DetectionRangeOption[] = [
@@ -68,7 +91,57 @@ const RANGE_CROP: Record<DetectionRange, { widthRatio: number; heightRatio: numb
   넓게: { widthRatio: 0.56, heightRatio: 0.4 },
 };
 
-const AUTO_SCAN_INTERVAL_MS = 2200;
+function resolveScanProfile(speedKmh: number): ScanProfile {
+  if (speedKmh >= 55) {
+    return { intervalMs: 900, cadenceMode: "fast", label: "고속 연속 스캔" };
+  }
+
+  if (speedKmh >= 24) {
+    return { intervalMs: 1500, cadenceMode: "normal", label: "도심 기본 스캔" };
+  }
+
+  return { intervalMs: 2300, cadenceMode: "slow", label: "저속 절전 스캔" };
+}
+
+async function playSignalHapticAlert(
+  enabled: boolean,
+  previousSignal: "red" | "yellow" | "green" | "unknown" | null,
+  nextSignal: "red" | "yellow" | "green" | "unknown",
+  previousLeftTurn: "go" | "stop" | "unknown" | null,
+  nextLeftTurn: "go" | "stop" | "unknown",
+  previousPedestrian: "walk" | "stop" | "unknown" | null,
+  nextPedestrian: "walk" | "stop" | "unknown",
+) {
+  if (!enabled || Platform.OS === "web") {
+    return;
+  }
+
+  if (nextSignal !== previousSignal) {
+    if (nextSignal === "red") {
+      await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      return;
+    }
+
+    if (nextSignal === "green") {
+      await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      return;
+    }
+
+    if (nextSignal === "yellow") {
+      await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+      return;
+    }
+  }
+
+  if (nextLeftTurn === "go" && nextLeftTurn !== previousLeftTurn) {
+    await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    return;
+  }
+
+  if (nextPedestrian === "walk" && nextPedestrian !== previousPedestrian) {
+    await Haptics.selectionAsync();
+  }
+}
 
 function formatClockLabel(timestamp: number) {
   if (!timestamp) {
@@ -100,12 +173,27 @@ export default function CameraScreen() {
   const [cameraReady, setCameraReady] = useState(false);
   const [lastAnalyzedAt, setLastAnalyzedAt] = useState(initialDetection.lastAnalyzedAt);
   const [lastDetectedAt, setLastDetectedAt] = useState(initialDetection.detectedAt);
+  const [scanIntervalMs, setScanIntervalMs] = useState(initialDetection.scanIntervalMs);
+  const [lastSpeedKmh, setLastSpeedKmh] = useState(initialDetection.lastSpeedKmh);
+  const [cadenceMode, setCadenceMode] = useState(initialDetection.cadenceMode);
+  const [adaptiveScanEnabled, setAdaptiveScanEnabled] = useState(DEFAULT_CAMERA_SETTINGS.adaptiveScanEnabled);
+  const [hapticAlertsEnabled, setHapticAlertsEnabled] = useState(DEFAULT_CAMERA_SETTINGS.hapticAlertsEnabled);
+  const [lowVisionModeEnabled, setLowVisionModeEnabled] = useState(DEFAULT_CAMERA_SETTINGS.lowVisionModeEnabled);
   const [permission, requestPermission] = useCameraPermissions();
+
   const cameraRef = useRef<CameraView | null>(null);
   const isAnalyzingRef = useRef(false);
   const monitoringActiveRef = useRef(initialDetection.monitoringActive);
+  const scanIntervalRef = useRef(initialDetection.scanIntervalMs);
+  const speedRef = useRef(initialDetection.lastSpeedKmh);
+  const cadenceModeRef = useRef(initialDetection.cadenceMode);
+  const locationSubscriptionRef = useRef<Location.LocationSubscription | null>(null);
   const lastDetectedStateRef = useRef<"red" | "yellow" | "green" | "unknown" | null>(
     initialDetection.state,
+  );
+  const lastLeftTurnStateRef = useRef<"go" | "stop" | "unknown" | null>(initialDetection.leftTurnState);
+  const lastPedestrianStateRef = useRef<"walk" | "stop" | "unknown" | null>(
+    initialDetection.pedestrianState,
   );
 
   const detectSignal = trpc.trafficSignal.detect.useMutation();
@@ -118,9 +206,29 @@ export default function CameraScreen() {
   const lastDetectedLabel = useMemo(() => formatClockLabel(lastDetectedAt), [lastDetectedAt]);
 
   useEffect(() => {
+    const loadCameraSettings = async () => {
+      try {
+        const savedValue = await AsyncStorage.getItem(SETTINGS_STORAGE_KEY);
+        if (!savedValue) {
+          return;
+        }
+
+        const parsed = JSON.parse(savedValue) as Partial<CameraSettings>;
+        setAdaptiveScanEnabled(parsed.adaptiveScanEnabled ?? DEFAULT_CAMERA_SETTINGS.adaptiveScanEnabled);
+        setHapticAlertsEnabled(parsed.hapticAlertsEnabled ?? DEFAULT_CAMERA_SETTINGS.hapticAlertsEnabled);
+        setLowVisionModeEnabled(parsed.lowVisionModeEnabled ?? DEFAULT_CAMERA_SETTINGS.lowVisionModeEnabled);
+      } catch (error) {
+        console.error("Failed to load camera settings", error);
+      }
+    };
+
+    void loadCameraSettings();
+
     return () => {
       cameraRef.current = null;
       monitoringActiveRef.current = false;
+      locationSubscriptionRef.current?.remove();
+      locationSubscriptionRef.current = null;
       void setTrafficSignalDetection({ monitoringActive: false });
     };
   }, []);
@@ -198,20 +306,31 @@ export default function CameraScreen() {
           lastAnalyzedAt: detectedAt,
           monitoringActive: monitoringActiveRef.current,
           summary: result.summary,
+          scanIntervalMs: scanIntervalRef.current,
+          lastSpeedKmh: speedRef.current,
+          cadenceMode: cadenceModeRef.current,
         });
 
         setLastAnalyzedAt(detectedAt);
         setLastDetectedAt(detectedAt);
         setLatestResultText(`${result.displayLabel} · 신뢰도 ${Math.round(result.confidence * 100)}%`);
-        setLatestDetailText(`${result.leftTurnLabel} · ${result.pedestrianLabel}`);
+        setLatestDetailText(
+          `${result.leftTurnLabel} · ${result.pedestrianLabel} · ${Math.round(speedRef.current)} km/h · ${(
+            scanIntervalRef.current / 1000
+          ).toFixed(1)}초`,
+        );
         setLiveStatusText(
           monitoringActiveRef.current
-            ? `실시간 스캔 중 · ${result.displayLabel}`
+            ? `${resolveScanProfile(speedRef.current).label} · ${result.displayLabel}`
             : `수동 인식 완료 · ${result.displayLabel}`,
         );
 
         const previousState = lastDetectedStateRef.current;
+        const previousLeftTurnState = lastLeftTurnStateRef.current;
+        const previousPedestrianState = lastPedestrianStateRef.current;
         lastDetectedStateRef.current = result.signalState;
+        lastLeftTurnStateRef.current = result.leftTurnState;
+        lastPedestrianStateRef.current = result.pedestrianState;
 
         if (result.signalState !== previousState) {
           if (result.signalState === "red") {
@@ -225,18 +344,29 @@ export default function CameraScreen() {
           }
         }
 
+        await playSignalHapticAlert(
+          hapticAlertsEnabled,
+          previousState,
+          result.signalState,
+          previousLeftTurnState,
+          result.leftTurnState,
+          previousPedestrianState,
+          result.pedestrianState,
+        );
+
         return true;
       } catch (error) {
         console.error("Failed to analyze traffic signal", error);
         setLastAnalyzedAt(analysisStartedAt);
-        setLiveStatusText(
-          monitoringActiveRef.current ? "실시간 스캔 재시도 중" : "AI 인식 실패",
-        );
+        setLiveStatusText(monitoringActiveRef.current ? "실시간 스캔 재시도 중" : "AI 인식 실패");
 
         await setTrafficSignalDetection({
           lastAnalyzedAt: analysisStartedAt,
           monitoringActive: monitoringActiveRef.current,
           summary: monitoringActiveRef.current ? "실시간 스캔 재시도 중" : "AI 인식 실패",
+          scanIntervalMs: scanIntervalRef.current,
+          lastSpeedKmh: speedRef.current,
+          cadenceMode: cadenceModeRef.current,
         });
 
         if (trigger === "manual") {
@@ -249,21 +379,28 @@ export default function CameraScreen() {
         setIsAnalyzing(false);
       }
     },
-    [cameraReady, detectSignal, ensurePermission, selectedRange],
+    [cameraReady, detectSignal, ensurePermission, hapticAlertsEnabled, selectedRange],
   );
 
   useEffect(() => {
     monitoringActiveRef.current = isMonitoring;
-    void setTrafficSignalDetection({ monitoringActive: isMonitoring });
+    void setTrafficSignalDetection({
+      monitoringActive: isMonitoring,
+      scanIntervalMs: scanIntervalRef.current,
+      lastSpeedKmh: speedRef.current,
+      cadenceMode: cadenceModeRef.current,
+    });
 
     if (!isMonitoring) {
+      locationSubscriptionRef.current?.remove();
+      locationSubscriptionRef.current = null;
       setLiveStatusText((current) =>
-        current.startsWith("실시간") ? "실시간 스캔 중지" : current,
+        current.startsWith("실시간") || current.includes("스캔") ? "실시간 스캔 중지" : current,
       );
       return;
     }
 
-    setLiveStatusText("실시간 스캔 준비 중");
+    setLiveStatusText(`${resolveScanProfile(speedRef.current).label} 준비 중`);
   }, [isMonitoring]);
 
   useEffect(() => {
@@ -272,6 +409,7 @@ export default function CameraScreen() {
     }
 
     let active = true;
+    let timerId: ReturnType<typeof setTimeout> | null = null;
 
     const runLoop = async () => {
       if (!active) {
@@ -279,18 +417,91 @@ export default function CameraScreen() {
       }
 
       await runSignalAnalysis("auto");
+
+      if (!active) {
+        return;
+      }
+
+      timerId = setTimeout(() => {
+        void runLoop();
+      }, adaptiveScanEnabled ? scanIntervalRef.current : DEFAULT_TRAFFIC_SIGNAL_DETECTION.scanIntervalMs);
     };
 
     void runLoop();
-    const timerId = setInterval(() => {
-      void runLoop();
-    }, AUTO_SCAN_INTERVAL_MS);
 
     return () => {
       active = false;
-      clearInterval(timerId);
+      if (timerId) {
+        clearTimeout(timerId);
+      }
     };
-  }, [cameraReady, isMonitoring, permission?.granted, runSignalAnalysis]);
+  }, [adaptiveScanEnabled, cameraReady, isMonitoring, permission?.granted, runSignalAnalysis]);
+
+  useEffect(() => {
+    const syncAdaptiveScan = async () => {
+      if (!isMonitoring || !adaptiveScanEnabled || Platform.OS === "web") {
+        scanIntervalRef.current = DEFAULT_TRAFFIC_SIGNAL_DETECTION.scanIntervalMs;
+        cadenceModeRef.current = DEFAULT_TRAFFIC_SIGNAL_DETECTION.cadenceMode;
+        setScanIntervalMs(DEFAULT_TRAFFIC_SIGNAL_DETECTION.scanIntervalMs);
+        setCadenceMode(DEFAULT_TRAFFIC_SIGNAL_DETECTION.cadenceMode);
+        return;
+      }
+
+      try {
+        const servicesEnabled = await Location.hasServicesEnabledAsync();
+        if (!servicesEnabled) {
+          return;
+        }
+
+        const permissionResult = await Location.requestForegroundPermissionsAsync();
+        if (permissionResult.status !== "granted") {
+          return;
+        }
+
+        locationSubscriptionRef.current?.remove();
+        locationSubscriptionRef.current = await Location.watchPositionAsync(
+          {
+            accuracy: Location.Accuracy.Balanced,
+            timeInterval: 4000,
+            distanceInterval: 10,
+          },
+          async (location) => {
+            const rawSpeed = typeof location.coords.speed === "number" ? location.coords.speed : 0;
+            const speedKmh = rawSpeed > 0 ? rawSpeed * 3.6 : 0;
+            const profile = resolveScanProfile(speedKmh);
+
+            speedRef.current = speedKmh;
+            scanIntervalRef.current = profile.intervalMs;
+            cadenceModeRef.current = profile.cadenceMode;
+            setLastSpeedKmh(Number(speedKmh.toFixed(1)));
+            setScanIntervalMs(profile.intervalMs);
+            setCadenceMode(profile.cadenceMode);
+            setLiveStatusText((current) =>
+              monitoringActiveRef.current && current.includes("실시간")
+                ? `${profile.label} · ${Math.round(speedKmh)} km/h`
+                : current,
+            );
+
+            await setTrafficSignalDetection({
+              monitoringActive: monitoringActiveRef.current,
+              scanIntervalMs: profile.intervalMs,
+              lastSpeedKmh: speedKmh,
+              cadenceMode: profile.cadenceMode,
+            });
+          },
+        );
+      } catch (error) {
+        console.error("Failed to start adaptive scan sync", error);
+      }
+    };
+
+    void syncAdaptiveScan();
+
+    return () => {
+      locationSubscriptionRef.current?.remove();
+      locationSubscriptionRef.current = null;
+    };
+  }, [adaptiveScanEnabled, isMonitoring]);
 
   const handleAnalyzeFrame = async () => {
     await runSignalAnalysis("manual");
@@ -334,22 +545,51 @@ export default function CameraScreen() {
           <View style={styles.headerSpacer} />
         </View>
 
-        <View style={styles.previewCard}>
+        <View style={[styles.previewCard, lowVisionModeEnabled && styles.previewCardLowVision]}>
           <View style={styles.previewTopRow}>
             <View style={styles.topBadgeRow}>
               <View style={styles.liveBadge}>
-                <Text style={styles.liveBadgeText}>{liveStatusText}</Text>
+                <Text style={[styles.liveBadgeText, lowVisionModeEnabled && styles.liveBadgeTextLowVision]}>
+                  {liveStatusText}
+                </Text>
               </View>
               <View style={[styles.scanStateBadge, isMonitoring && styles.scanStateBadgeActive]}>
-                <Text style={[styles.scanStateBadgeText, isMonitoring && styles.scanStateBadgeTextActive]}>
+                <Text
+                  style={[
+                    styles.scanStateBadgeText,
+                    isMonitoring && styles.scanStateBadgeTextActive,
+                    lowVisionModeEnabled && styles.scanStateBadgeTextLowVision,
+                  ]}
+                >
                   {isMonitoring ? "연속 스캔 켜짐" : "연속 스캔 꺼짐"}
                 </Text>
               </View>
             </View>
-            <Text style={styles.previewHint}>전방 신호등 중심으로 맞춰 주세요</Text>
+
+            <View style={styles.featureBadgeRow}>
+              <View style={styles.featureBadge}>
+                <Text style={[styles.featureBadgeText, lowVisionModeEnabled && styles.featureBadgeTextLowVision]}>
+                  속도 적응 {adaptiveScanEnabled ? "ON" : "OFF"}
+                </Text>
+              </View>
+              <View style={styles.featureBadge}>
+                <Text style={[styles.featureBadgeText, lowVisionModeEnabled && styles.featureBadgeTextLowVision]}>
+                  진동 경고 {hapticAlertsEnabled ? "ON" : "OFF"}
+                </Text>
+              </View>
+              <View style={styles.featureBadge}>
+                <Text style={[styles.featureBadgeText, lowVisionModeEnabled && styles.featureBadgeTextLowVision]}>
+                  저시력 모드 {lowVisionModeEnabled ? "ON" : "OFF"}
+                </Text>
+              </View>
+            </View>
+
+            <Text style={[styles.previewHint, lowVisionModeEnabled && styles.previewHintLowVision]}>
+              전방 신호등 중심으로 맞춰 주세요
+            </Text>
           </View>
 
-          <View style={styles.cameraStage}>
+          <View style={[styles.cameraStage, lowVisionModeEnabled && styles.cameraStageLowVision]}>
             {permission?.granted && Platform.OS !== "web" ? (
               <CameraView
                 ref={(instance) => {
@@ -362,7 +602,7 @@ export default function CameraScreen() {
             ) : (
               <View style={styles.cameraFallbackLayer}>
                 <MaterialIcons name="photo-camera" size={42} color="#cbd5e1" />
-                <Text style={styles.cameraFallbackText}>
+                <Text style={[styles.cameraFallbackText, lowVisionModeEnabled && styles.cameraFallbackTextLowVision]}>
                   {Platform.OS === "web"
                     ? "웹 미리보기에서는 카메라 대신 안내 화면을 표시합니다"
                     : "카메라 권한을 허용하면 실제 프리뷰가 시작됩니다"}
@@ -387,13 +627,17 @@ export default function CameraScreen() {
 
             <View style={styles.cameraCenterChip}>
               <MaterialIcons name="center-focus-strong" size={28} color="#ffffff" />
-              <Text style={styles.cameraCenterChipText}>{currentRange.title} 인식 범위</Text>
+              <Text style={[styles.cameraCenterChipText, lowVisionModeEnabled && styles.cameraCenterChipTextLowVision]}>
+                {currentRange.title} 인식 범위
+              </Text>
             </View>
           </View>
 
           <View style={styles.rangeCard}>
-            <Text style={styles.sectionTitle}>인식 범위 조절</Text>
-            <Text style={styles.sectionBody}>
+            <Text style={[styles.sectionTitle, lowVisionModeEnabled && styles.sectionTitleLowVision]}>
+              인식 범위 조절
+            </Text>
+            <Text style={[styles.sectionBody, lowVisionModeEnabled && styles.sectionBodyLowVision]}>
               슬라이더 대신 큰 단계 버튼으로 조절할 수 있게 구성했습니다. 연속 스캔 중에도 범위를 바꾸면 다음 프레임부터 바로 반영됩니다.
             </Text>
 
@@ -412,13 +656,20 @@ export default function CameraScreen() {
                       pressed && styles.buttonPressed,
                     ]}
                   >
-                    <Text style={[styles.rangeButtonTitle, selected && styles.rangeButtonTitleSelected]}>
+                    <Text
+                      style={[
+                        styles.rangeButtonTitle,
+                        selected && styles.rangeButtonTitleSelected,
+                        lowVisionModeEnabled && styles.rangeButtonTitleLowVision,
+                      ]}
+                    >
                       {option.title}
                     </Text>
                     <Text
                       style={[
                         styles.rangeButtonDescription,
                         selected && styles.rangeButtonDescriptionSelected,
+                        lowVisionModeEnabled && styles.rangeButtonDescriptionLowVision,
                       ]}
                     >
                       {option.description}
@@ -430,19 +681,45 @@ export default function CameraScreen() {
           </View>
 
           <View style={styles.summaryCard}>
-            <Text style={styles.summaryTitle}>현재 선택</Text>
-            <Text style={styles.summaryValue}>{currentRange.title}</Text>
-            <Text style={styles.summaryDescription}>{RANGE_FOCUS_HINT[currentRange.key]}</Text>
-            <Text style={styles.summaryMeta}>{latestResultText}</Text>
-            <Text style={styles.summarySubMeta}>{latestDetailText}</Text>
+            <Text style={[styles.summaryTitle, lowVisionModeEnabled && styles.summaryTitleLowVision]}>
+              현재 선택
+            </Text>
+            <Text style={[styles.summaryValue, lowVisionModeEnabled && styles.summaryValueLowVision]}>
+              {currentRange.title}
+            </Text>
+            <Text
+              style={[
+                styles.summaryDescription,
+                lowVisionModeEnabled && styles.summaryDescriptionLowVision,
+              ]}
+            >
+              {RANGE_FOCUS_HINT[currentRange.key]}
+            </Text>
+            <Text style={[styles.summaryMeta, lowVisionModeEnabled && styles.summaryMetaLowVision]}>
+              {latestResultText}
+            </Text>
+            <Text style={[styles.summarySubMeta, lowVisionModeEnabled && styles.summarySubMetaLowVision]}>
+              {latestDetailText}
+            </Text>
+            <Text style={[styles.summarySubMeta, lowVisionModeEnabled && styles.summarySubMetaLowVision]}>
+              {adaptiveScanEnabled ? "속도 적응 스캔" : "고정 주기 스캔"} · {Math.round(lastSpeedKmh)} km/h · {(scanIntervalMs / 1000).toFixed(1)}초 · {cadenceMode}
+            </Text>
             <View style={styles.summaryInfoRow}>
               <View style={styles.summaryInfoChip}>
-                <Text style={styles.summaryInfoLabel}>마지막 스캔</Text>
-                <Text style={styles.summaryInfoValue}>{lastAnalyzedLabel}</Text>
+                <Text style={[styles.summaryInfoLabel, lowVisionModeEnabled && styles.summaryInfoLabelLowVision]}>
+                  마지막 스캔
+                </Text>
+                <Text style={[styles.summaryInfoValue, lowVisionModeEnabled && styles.summaryInfoValueLowVision]}>
+                  {lastAnalyzedLabel}
+                </Text>
               </View>
               <View style={styles.summaryInfoChip}>
-                <Text style={styles.summaryInfoLabel}>마지막 감지</Text>
-                <Text style={styles.summaryInfoValue}>{lastDetectedLabel}</Text>
+                <Text style={[styles.summaryInfoLabel, lowVisionModeEnabled && styles.summaryInfoLabelLowVision]}>
+                  마지막 감지
+                </Text>
+                <Text style={[styles.summaryInfoValue, lowVisionModeEnabled && styles.summaryInfoValueLowVision]}>
+                  {lastDetectedLabel}
+                </Text>
               </View>
             </View>
           </View>
@@ -468,7 +745,13 @@ export default function CameraScreen() {
               pressed && styles.buttonPressed,
             ]}
           >
-            <Text style={[styles.secondaryButtonText, isMonitoring && styles.secondaryButtonTextActive]}>
+            <Text
+              style={[
+                styles.secondaryButtonText,
+                isMonitoring && styles.secondaryButtonTextActive,
+                lowVisionModeEnabled && styles.actionButtonTextLowVision,
+              ]}
+            >
               {isMonitoring ? "실시간 중지" : "실시간 시작"}
             </Text>
           </Pressable>
@@ -484,7 +767,9 @@ export default function CameraScreen() {
             ]}
           >
             {isAnalyzing ? <ActivityIndicator color="#ffffff" /> : null}
-            <Text style={styles.confirmButtonText}>{isAnalyzing ? "인식 중" : "신호등 인식"}</Text>
+            <Text style={[styles.confirmButtonText, lowVisionModeEnabled && styles.actionButtonTextLowVision]}>
+              {isAnalyzing ? "인식 중" : "신호등 인식"}
+            </Text>
           </Pressable>
         </View>
       </View>
@@ -542,8 +827,13 @@ const styles = StyleSheet.create({
     paddingVertical: 18,
     gap: 16,
   },
+  previewCardLowVision: {
+    paddingHorizontal: 20,
+    paddingVertical: 20,
+    gap: 20,
+  },
   previewTopRow: {
-    gap: 8,
+    gap: 10,
   },
   topBadgeRow: {
     flexDirection: "row",
@@ -563,6 +853,10 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
     color: "#ffffff",
   },
+  liveBadgeTextLowVision: {
+    fontSize: 22,
+    lineHeight: 28,
+  },
   scanStateBadge: {
     borderRadius: 999,
     backgroundColor: "#e5e7eb",
@@ -580,10 +874,38 @@ const styles = StyleSheet.create({
   scanStateBadgeTextActive: {
     color: "#166534",
   },
+  scanStateBadgeTextLowVision: {
+    fontSize: 20,
+    lineHeight: 24,
+  },
+  featureBadgeRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+  },
+  featureBadge: {
+    borderRadius: 999,
+    backgroundColor: "#e2e8f0",
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+  },
+  featureBadgeText: {
+    fontSize: 14,
+    fontWeight: "800",
+    color: "#334155",
+  },
+  featureBadgeTextLowVision: {
+    fontSize: 18,
+    lineHeight: 22,
+  },
   previewHint: {
     fontSize: 20,
     fontWeight: "bold",
     color: "#4b5563",
+  },
+  previewHintLowVision: {
+    fontSize: 26,
+    lineHeight: 32,
   },
   cameraStage: {
     height: 230,
@@ -593,6 +915,9 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     overflow: "hidden",
     position: "relative",
+  },
+  cameraStageLowVision: {
+    height: 248,
   },
   cameraFallbackLayer: {
     ...StyleSheet.absoluteFillObject,
@@ -608,6 +933,10 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     color: "#e2e8f0",
     textAlign: "center",
+  },
+  cameraFallbackTextLowVision: {
+    fontSize: 21,
+    lineHeight: 30,
   },
   detectionFrame: {
     borderWidth: 2,
@@ -677,6 +1006,10 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
     color: "#ffffff",
   },
+  cameraCenterChipTextLowVision: {
+    fontSize: 22,
+    lineHeight: 28,
+  },
   rangeCard: {
     borderRadius: 24,
     backgroundColor: "#ffffff",
@@ -691,27 +1024,37 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
     color: "#11181c",
   },
+  sectionTitleLowVision: {
+    fontSize: 30,
+    lineHeight: 36,
+  },
   sectionBody: {
     fontSize: 18,
     fontWeight: "600",
     lineHeight: 26,
     color: "#4b5563",
   },
+  sectionBodyLowVision: {
+    fontSize: 22,
+    lineHeight: 32,
+  },
   rangeButtonRow: {
+    flexDirection: "row",
     gap: 10,
   },
   rangeButton: {
-    borderRadius: 20,
+    flex: 1,
+    borderRadius: 22,
     borderWidth: 1,
-    borderColor: "#d1d5db",
+    borderColor: "#cbd5e1",
     backgroundColor: "#f8fafc",
-    paddingHorizontal: 16,
+    paddingHorizontal: 12,
     paddingVertical: 14,
-    gap: 4,
+    gap: 6,
   },
   rangeButtonSelected: {
     borderColor: "#111827",
-    backgroundColor: "#e5f0ff",
+    backgroundColor: "#111827",
   },
   rangeButtonTitle: {
     fontSize: 24,
@@ -719,7 +1062,11 @@ const styles = StyleSheet.create({
     color: "#11181c",
   },
   rangeButtonTitleSelected: {
-    color: "#111827",
+    color: "#ffffff",
+  },
+  rangeButtonTitleLowVision: {
+    fontSize: 30,
+    lineHeight: 36,
   },
   rangeButtonDescription: {
     fontSize: 17,
@@ -727,13 +1074,17 @@ const styles = StyleSheet.create({
     color: "#6b7280",
   },
   rangeButtonDescriptionSelected: {
-    color: "#334155",
+    color: "#cbd5e1",
+  },
+  rangeButtonDescriptionLowVision: {
+    fontSize: 20,
+    lineHeight: 28,
   },
   summaryCard: {
-    borderRadius: 24,
-    backgroundColor: "#111827",
+    borderRadius: 26,
+    backgroundColor: "#0f172a",
     paddingHorizontal: 18,
-    paddingVertical: 16,
+    paddingVertical: 18,
     gap: 6,
   },
   summaryTitle: {
@@ -741,10 +1092,18 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
     color: "#cbd5e1",
   },
+  summaryTitleLowVision: {
+    fontSize: 24,
+    lineHeight: 30,
+  },
   summaryValue: {
     fontSize: 30,
     fontWeight: "bold",
     color: "#ffffff",
+  },
+  summaryValueLowVision: {
+    fontSize: 42,
+    lineHeight: 48,
   },
   summaryDescription: {
     fontSize: 18,
@@ -752,93 +1111,120 @@ const styles = StyleSheet.create({
     lineHeight: 24,
     color: "#d1d5db",
   },
+  summaryDescriptionLowVision: {
+    fontSize: 22,
+    lineHeight: 30,
+  },
   summaryMeta: {
     marginTop: 4,
     fontSize: 17,
     fontWeight: "700",
     color: "#93c5fd",
   },
+  summaryMetaLowVision: {
+    fontSize: 22,
+    lineHeight: 28,
+  },
   summarySubMeta: {
     fontSize: 16,
     fontWeight: "700",
     color: "#cbd5e1",
   },
+  summarySubMetaLowVision: {
+    fontSize: 20,
+    lineHeight: 26,
+  },
   summaryInfoRow: {
-    marginTop: 10,
     flexDirection: "row",
-    gap: 10,
+    gap: 12,
+    marginTop: 8,
   },
   summaryInfoChip: {
     flex: 1,
     borderRadius: 18,
-    backgroundColor: "rgba(255, 255, 255, 0.08)",
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    gap: 2,
+    backgroundColor: "rgba(148, 163, 184, 0.18)",
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    gap: 4,
   },
   summaryInfoLabel: {
     fontSize: 14,
     fontWeight: "800",
     color: "#94a3b8",
   },
+  summaryInfoLabelLowVision: {
+    fontSize: 18,
+    lineHeight: 22,
+  },
   summaryInfoValue: {
     fontSize: 18,
     fontWeight: "900",
     color: "#ffffff",
   },
+  summaryInfoValueLowVision: {
+    fontSize: 24,
+    lineHeight: 30,
+  },
   permissionButton: {
     marginTop: 14,
-    borderRadius: 24,
-    backgroundColor: "#0f172a",
+    borderRadius: 22,
+    backgroundColor: "#111827",
     alignItems: "center",
     justifyContent: "center",
     paddingVertical: 16,
   },
   permissionButtonText: {
-    fontSize: 22,
+    fontSize: 20,
     fontWeight: "bold",
     color: "#ffffff",
   },
   actionRow: {
-    marginTop: 14,
     flexDirection: "row",
     gap: 12,
+    marginTop: 14,
   },
   secondaryButton: {
     flex: 1,
     borderRadius: 24,
-    backgroundColor: "#dbe4f0",
+    borderWidth: 1,
+    borderColor: "#cbd5e1",
+    backgroundColor: "#ffffff",
     alignItems: "center",
     justifyContent: "center",
     paddingVertical: 18,
   },
   secondaryButtonActive: {
     backgroundColor: "#dcfce7",
+    borderColor: "#86efac",
   },
   secondaryButtonText: {
     fontSize: 22,
     fontWeight: "bold",
-    color: "#0f172a",
+    color: "#11181c",
   },
   secondaryButtonTextActive: {
     color: "#166534",
   },
   confirmButton: {
-    flex: 1.2,
+    flex: 1,
     borderRadius: 24,
     backgroundColor: "#111827",
     alignItems: "center",
     justifyContent: "center",
     flexDirection: "row",
-    gap: 8,
+    gap: 10,
     paddingVertical: 18,
   },
   confirmButtonDisabled: {
-    opacity: 0.72,
+    opacity: 0.76,
   },
   confirmButtonText: {
     fontSize: 24,
     fontWeight: "bold",
     color: "#ffffff",
+  },
+  actionButtonTextLowVision: {
+    fontSize: 28,
+    lineHeight: 34,
   },
 });
