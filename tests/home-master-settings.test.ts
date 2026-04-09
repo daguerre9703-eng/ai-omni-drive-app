@@ -70,29 +70,27 @@ describe("home master settings regression", () => {
   });
 
   it("wires the settings center controls into the settings screen", () => {
-    expect(settingsSource).toContain("홈 화면 전문 설정 센터");
-    expect(settingsSource).toContain("드래그해서 위치 조절");
-    expect(settingsSource).toContain("상하 여백 밸런스");
-    expect(settingsSource).toContain("폰트 셀렉터");
+    expect(settingsSource).toContain("Home-Master Custom");
+    expect(settingsSource).toContain("한 화면에서 바로 조정");
     expect(settingsSource).toContain("배경 그레이 명도");
-    expect(settingsSource).toContain("빨간불 Glow 강도");
-    expect(settingsSource).toContain("나만의 테마 1 저장");
+    expect(settingsSource).toContain("배경 그레이 채도");
+    expect(settingsSource).toContain("상하 밸런스");
+    expect(settingsSource).toContain("나만의 테마 1");
+    expect(settingsSource).toContain("테마 저장");
     expect(settingsSource).toContain("원상복구");
     expect(settingsSource).toContain("PanResponder.create");
   });
-
   it("reflects saved home master settings on the home hud", () => {
     expect(homeSource).toContain("HOME_MASTER_STORAGE_KEY");
     expect(homeSource).toContain("setHomeMasterSettings(mergeHomeMasterSettings(parsedHomeMasterValue));");
     expect(homeSource).toContain("dynamicBackgroundColor");
-    expect(homeSource).toContain('shellTransform("signal")');
-    expect(homeSource).toContain('shellTransform("speed")');
-    expect(homeSource).toContain('shellTransform("direction")');
+    expect(homeSource).toContain("fontSize: homeMasterSettings.sizes.signalTitle");
     expect(homeSource).toContain("fontSize: homeMasterSettings.sizes.distanceValue");
     expect(homeSource).toContain("fontSize: homeMasterSettings.sizes.speedValue");
-    expect(homeSource).toContain("fontSize: homeMasterSettings.sizes.directionLabel");
     expect(homeSource).toContain("homeMasterSettings.sizes.directionArrow");
     expect(homeSource).toContain("dynamicSignalGlow");
     expect(homeSource).toContain("getSignalGlowOpacity(0.54, homeMasterSettings.signalGlow.red)");
+    expect(homeSource).toContain("getGrayBackgroundColor");
+    expect(homeSource).toContain("getShellOverlayColor");
   });
 });

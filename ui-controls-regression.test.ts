@@ -20,15 +20,16 @@ describe("camera and settings controls regression", () => {
     expect(cameraSource).toContain('Text style={styles.confirmButtonText}>확인</Text>');
   });
 
-  it("keeps settings persistence and the main confirm button wired", () => {
+  it("keeps settings persistence and the grid modal save flow wired", () => {
     expect(settingsSource).toContain('import AsyncStorage from "@react-native-async-storage/async-storage";');
     expect(settingsSource).toContain('const SETTINGS_STORAGE_KEY = "ai-omni-drive:settings";');
     expect(settingsSource).toContain('await AsyncStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(nextSettings));');
-    expect(settingsSource).toContain('text: "확인"');
-    expect(settingsSource).toContain('onPress: () => router.back()');
+    expect(settingsSource).toContain('Home-Master Custom');
+    expect(settingsSource).toContain('그리드 설정 센터를 준비하고 있습니다.');
+    expect(settingsSource).toContain('onPress={() => router.back()}');
     expect(settingsSource).toContain('onPress={handleAddDestination}');
     expect(settingsSource).toContain('onPress={handleSave}');
-    expect(settingsSource).toContain('{isSaving ? "저장 중..." : isLoading ? "불러오는 중..." : "확인"}');
+    expect(settingsSource).toContain('{isSaving ? "저장 중" : "저장"}');
   });
 
   it("keeps custom voice alert length and style controls wired", () => {

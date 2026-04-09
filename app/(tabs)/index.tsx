@@ -25,7 +25,7 @@ import {
   type VoiceAlertStyle,
 } from "@/lib/voice-alerts";
 
-type SignalState = "red" | "yellow" | "green";
+type SignalState = "inactive" | "red" | "yellow" | "green";
 type DirectionState = "left" | "straight" | "right" | "uturn";
 type NavigationProvider = "kakaomap" | "inavi" | "tmap";
 type ArrowSize = "large" | "xlarge" | "huge";
@@ -49,7 +49,7 @@ type RoutePoint = {
 };
 
 const SETTINGS_STORAGE_KEY = "ai-omni-drive:settings";
-const SIGNAL_SEQUENCE: SignalState[] = ["green", "yellow", "red"];
+const SIGNAL_SEQUENCE: SignalState[] = ["inactive", "green", "yellow", "red"];
 const DIRECTION_SEQUENCE: DirectionState[] = ["straight", "left", "right", "uturn"];
 
 const DEFAULT_SETTINGS: AppSettings = {
@@ -117,6 +117,12 @@ const SIGNAL_META: Record<
     glow: string;
   }
 > = {
+  inactive: {
+    title: "IDLE",
+    label: "미감지",
+    cardBackground: "#AEB5BE",
+    glow: "rgba(116, 126, 138, 0.08)",
+  },
   red: {
     title: "STOP",
     label: "정지",
@@ -140,24 +146,24 @@ const SIGNAL_META: Record<
 const DIRECTION_META: Record<
   DirectionState,
   {
-    symbol: string;
+    icon: keyof typeof MaterialIcons.glyphMap;
     label: string;
   }
 > = {
   left: {
-    symbol: "←",
+    icon: "west",
     label: "좌회전",
   },
   straight: {
-    symbol: "↑",
+    icon: "north",
     label: "직진",
   },
   right: {
-    symbol: "→",
+    icon: "east",
     label: "우회전",
   },
   uturn: {
-    symbol: "↶",
+    icon: "u-turn-left",
     label: "유턴",
   },
 };
@@ -177,12 +183,14 @@ export default function HomeScreen() {
   );
   const [arrowSize, setArrowSize] = useState<ArrowSize>(DEFAULT_SETTINGS.arrowSize);
   const [liveRouteSyncEnabled, setLiveRouteSyncEnabled] = useState(DEFAULT_SETTINGS.liveRouteSyncEnabled);
-  const [distanceValue, setDistanceValue] = useState(GPS_ROUTE_POINTS[0].signalDistanceLabel);
-  const [speedValue, setSpeedValue] = useState(GPS_ROUTE_POINTS[0].fallbackSpeedLabel);
+  const [distanceValue, setDistanceValue] = useState("--");
+  const [speedValue, setSpeedValue] = useState("0 km/h");
   const [redAlertVisible, setRedAlertVisible] = useState(false);
   const [homeMasterSettings, setHomeMasterSettings] = useState<HomeMasterSettings>(DEFAULT_HOME_MASTER_SETTINGS);
+  const [bottomBarVisible, setBottomBarVisible] = useState(false);
   const routeIndexRef = useRef(0);
   const locationSubscriptionRef = useRef<Location.LocationSubscription | null>(null);
+  const bottomBarHideTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const loadSettings = useCallback(async () => {
     try {
@@ -224,6 +232,14 @@ export default function HomeScreen() {
     }, 10000);
 
     return () => clearInterval(interval);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (bottomBarHideTimeoutRef.current) {
+        clearTimeout(bottomBarHideTimeoutRef.current);
+      }
+    };
   }, []);
 
   useEffect(() => {
@@ -279,13 +295,13 @@ export default function HomeScreen() {
             distanceInterval: 5,
           },
           (location) => {
-            const routePoint = GPS_ROUTE_POINTS[0];
-            routeIndexRef.current = 0;
+            const routePoint = GPS_ROUTE_POINTS[routeIndexRef.current % GPS_ROUTE_POINTS.length];
+            routeIndexRef.current = (routeIndexRef.current + 1) % GPS_ROUTE_POINTS.length;
 
             setDistanceValue(routePoint.signalDistanceLabel);
             const speedKmh = typeof location.coords.speed === "number" && location.coords.speed > 0
               ? `${Math.round(location.coords.speed * 3.6)} km/h`
-              : routePoint.fallbackSpeedLabel;
+              : "0 km/h";
             setSpeedValue(speedKmh);
             setDirectionIndex(DIRECTION_SEQUENCE.indexOf(routePoint.direction));
           },
@@ -305,14 +321,21 @@ export default function HomeScreen() {
 
   const currentSignalState = SIGNAL_SEQUENCE[signalIndex];
   const currentSignal = useMemo(() => SIGNAL_META[currentSignalState], [currentSignalState]);
+  const isSignalInactive = currentSignalState === "inactive";
+  const displayedDistanceValue = isSignalInactive ? "--" : distanceValue;
   const isRedSignal = currentSignalState === "red";
   const voicePreviewText = useMemo(() => {
     if (!voiceGuideEnabled) {
       return "음성 안내 꺼짐";
     }
 
-    return buildVoiceAlertText(
-      SIGNAL_SEQUENCE[signalIndex] === "green" ? "green_signal_changed" : "red_signal_ahead",
+      if (currentSignalState === "inactive") {
+        return "신호 미감지";
+      }
+
+      return buildVoiceAlertText(
+        SIGNAL_SEQUENCE[signalIndex] === "green" ? "green_signal_changed" : "red_signal_ahead",
+
       {
         enabled: voiceGuideEnabled,
         length: voiceAlertLength,
@@ -320,11 +343,21 @@ export default function HomeScreen() {
       },
       { distanceMeters: GPS_ROUTE_POINTS[routeIndexRef.current % GPS_ROUTE_POINTS.length]?.signalDistanceMeters ?? 128 },
     );
-  }, [signalIndex, voiceGuideEnabled, voiceAlertLength, voiceAlertStyle]);
+  }, [currentSignalState, signalIndex, voiceGuideEnabled, voiceAlertLength, voiceAlertStyle]);
   const currentDirection = useMemo(
     () => DIRECTION_META[DIRECTION_SEQUENCE[directionIndex] ?? "straight"],
     [directionIndex],
   );
+  const revealBottomBar = useCallback(() => {
+    if (bottomBarHideTimeoutRef.current) {
+      clearTimeout(bottomBarHideTimeoutRef.current);
+    }
+
+    setBottomBarVisible(true);
+    bottomBarHideTimeoutRef.current = setTimeout(() => {
+      setBottomBarVisible(false);
+    }, 2200);
+  }, []);
   const arrowFontSize = ARROW_FONT_SIZE[arrowSize];
   const sharedFontFamily = getFontFamilyForPreset(homeMasterSettings.fontPreset);
   const sharedFontWeight = getFontWeightForPreset(homeMasterSettings.fontPreset);
@@ -360,15 +393,20 @@ export default function HomeScreen() {
   };
 
   return (
-    <ScreenContainer style={[styles.screenContent, { backgroundColor: dynamicBackgroundColor }]}> 
+    <ScreenContainer
+      onTouchStart={revealBottomBar}
+      style={[styles.screenContent, { backgroundColor: dynamicBackgroundColor }]}
+    >
       <View style={[styles.root, { backgroundColor: dynamicBackgroundColor }]}>
         {isRedSignal ? (
           <View
-            pointerEvents="none"
             style={[
               styles.redAlertOverlay,
               redAlertVisible ? styles.redAlertOverlayVisible : styles.redAlertOverlayHidden,
-              { opacity: redAlertVisible ? getSignalGlowOpacity(0.54, homeMasterSettings.signalGlow.red) : 0.08 },
+              {
+                opacity: redAlertVisible ? getSignalGlowOpacity(0.54, homeMasterSettings.signalGlow.red) : 0.08,
+                pointerEvents: "none",
+              },
             ]}
           />
         ) : null}
@@ -415,7 +453,8 @@ export default function HomeScreen() {
                   },
                 ]}
               >
-                {distanceValue}
+                  {displayedDistanceValue}
+
               </Text>
             </View>
           </View>
@@ -463,26 +502,20 @@ export default function HomeScreen() {
             ]}
           >
             <View style={[styles.directionCard, { backgroundColor: dynamicShellColor }]}> 
-              <Text
-                style={[
-                  styles.directionArrow,
-                  {
-                    fontSize: Math.round(arrowFontSize * 2.35 * homeMasterSettings.sizes.directionArrow),
-                    lineHeight: Math.round(arrowFontSize * 2.35 * homeMasterSettings.sizes.directionArrow) + 10,
-                    fontFamily: sharedFontFamily,
-                    textShadowColor: "rgba(255,255,255,0.32)",
-                    transform: [{ scaleX: 1.34 }, { scaleY: 1.12 }],
-                  },
-                ]}
-              >
-                {currentDirection.symbol}
-              </Text>
+              <View style={styles.directionArrowWrap}>
+                <MaterialIcons
+                  name={currentDirection.icon}
+                  size={Math.round(arrowFontSize * 2.42 * homeMasterSettings.sizes.directionArrow)}
+                  color="#1B2330"
+                  style={styles.directionArrowIcon}
+                />
+              </View>
               <Text
                 style={[
                   styles.directionLabel,
                   {
-                    fontSize: homeMasterSettings.sizes.directionLabel,
-                    lineHeight: homeMasterSettings.sizes.directionLabel + 4,
+                    fontSize: Math.max(homeMasterSettings.sizes.directionLabel, 34),
+                    lineHeight: Math.max(homeMasterSettings.sizes.directionLabel, 34) + 8,
                     fontFamily: sharedFontFamily,
                     fontWeight: sharedFontWeight,
                   },
@@ -494,36 +527,50 @@ export default function HomeScreen() {
           </Pressable>
         </View>
 
-        <View style={[styles.bottomBarShell, { backgroundColor: dynamicShellColor }]}>
-          <View style={[styles.bottomBar, { backgroundColor: getShellOverlayColor(homeMasterSettings.theme.backgroundGrayLightness, homeMasterSettings.theme.backgroundGraySaturation, 0.9) }]}>
-            <Pressable
-              accessibilityRole="button"
-              onPress={() => router.push("/camera")}
-              style={({ pressed }) => [styles.bottomButton, pressed && styles.bottomButtonPressed]}
+        {bottomBarVisible ? (
+          <View style={[styles.bottomBarShell, { backgroundColor: dynamicShellColor }]}> 
+            <View
+              style={[
+                styles.bottomBar,
+                {
+                  backgroundColor: getShellOverlayColor(
+                    homeMasterSettings.theme.backgroundGrayLightness,
+                    homeMasterSettings.theme.backgroundGraySaturation,
+                    0.9,
+                  ),
+                },
+              ]}
             >
-              <MaterialIcons name="photo-camera" size={24} color="#1E2630" />
-              <Text style={styles.bottomButtonText}>카메라</Text>
-            </Pressable>
+              <Pressable
+                accessibilityRole="button"
+                onPress={() => router.push("/camera")}
+                style={({ pressed }) => [styles.bottomButton, pressed && styles.bottomButtonPressed]}
+              >
+                <MaterialIcons name="photo-camera" size={20} color="#1E2630" />
+                <Text style={styles.bottomButtonText}>카메라</Text>
+              </Pressable>
 
-            <Pressable
-              accessibilityRole="button"
-              onPress={() => router.push("/")}
-              style={({ pressed }) => [styles.bottomButton, pressed && styles.bottomButtonPressed]}
-            >
-              <MaterialIcons name="home" size={24} color="#1E2630" />
-              <Text style={styles.bottomButtonText}>홈</Text>
-            </Pressable>
+              <Pressable
+                accessibilityRole="button"
+                onPress={() => router.push("/")}
+                style={({ pressed }) => [styles.bottomButton, pressed && styles.bottomButtonPressed]}
+              >
+                <MaterialIcons name="home" size={20} color="#1E2630" />
+                <Text style={styles.bottomButtonText}>홈</Text>
+              </Pressable>
 
-            <Pressable
-              accessibilityRole="button"
-              onPress={() => router.push("/settings")}
-              style={({ pressed }) => [styles.bottomButton, pressed && styles.bottomButtonPressed]}
-            >
-              <MaterialIcons name="settings" size={24} color="#1E2630" />
-              <Text style={styles.bottomButtonText}>설정</Text>
-            </Pressable>
+              <Pressable
+                accessibilityRole="button"
+                onPress={() => router.push("/settings")}
+                style={({ pressed }) => [styles.bottomButton, pressed && styles.bottomButtonPressed]}
+              >
+                <MaterialIcons name="settings" size={20} color="#1E2630" />
+                <Text style={styles.bottomButtonText}>설정</Text>
+              </Pressable>
+            </View>
           </View>
-        </View>
+        ) : null}
+
       </View>
     </ScreenContainer>
   );
@@ -551,10 +598,10 @@ const styles = StyleSheet.create({
     backgroundColor: "#B7BBC2",
     paddingHorizontal: 8,
     paddingTop: 2,
-    paddingBottom: 4,
+    paddingBottom: 2,
   },
   topBar: {
-    height: 28,
+    height: 24,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -562,7 +609,7 @@ const styles = StyleSheet.create({
     minWidth: 84,
     borderRadius: 999,
     paddingHorizontal: 14,
-    paddingVertical: 5,
+    paddingVertical: 4,
     backgroundColor: "#D1D4DA",
     borderWidth: 1,
     borderColor: "#ECEEF2",
@@ -574,16 +621,16 @@ const styles = StyleSheet.create({
   },
   providerText: {
     textAlign: "center",
-    fontSize: 12,
-    lineHeight: 14,
+    fontSize: 11,
+    lineHeight: 13,
     fontWeight: "800",
     color: "#4F5661",
   },
   mainStack: {
     flex: 1,
-    gap: 6,
-    paddingTop: 2,
-    paddingBottom: 42,
+    gap: 12,
+    paddingTop: 8,
+    paddingBottom: 20,
   },
   cardShell: {
     borderRadius: 22,
@@ -598,10 +645,10 @@ const styles = StyleSheet.create({
     elevation: 0,
   },
   signalShell: {
-    flex: 1.72,
+    flex: 0.62,
   },
   infoShell: {
-    flex: 0.68,
+    flex: 0.22,
   },
   pressedCardShell: {
     opacity: 0.94,
@@ -609,12 +656,12 @@ const styles = StyleSheet.create({
   },
   signalCard: {
     flex: 1,
-    minHeight: 272,
+    minHeight: 164,
     borderRadius: 20,
     alignItems: "center",
     justifyContent: "flex-start",
-    paddingTop: 24,
-    paddingBottom: 26,
+    paddingTop: 12,
+    paddingBottom: 12,
     borderWidth: 1,
     borderColor: "rgba(236, 241, 244, 0.9)",
     shadowOpacity: 0.18,
@@ -623,8 +670,8 @@ const styles = StyleSheet.create({
     elevation: 2,
   },
   signalTitle: {
-    fontSize: 48,
-    lineHeight: 52,
+    fontSize: 35,
+    lineHeight: 39,
     fontWeight: "900",
     color: "#F6F8FA",
     letterSpacing: -1,
@@ -633,9 +680,9 @@ const styles = StyleSheet.create({
     textShadowRadius: 3,
   },
   signalDistanceValue: {
-    marginTop: 74,
-    fontSize: 88,
-    lineHeight: 92,
+    marginTop: 24,
+    fontSize: 74,
+    lineHeight: 78,
     fontWeight: "700",
     color: "#111111",
     textAlign: "center",
@@ -643,7 +690,7 @@ const styles = StyleSheet.create({
   },
   infoCard: {
     flex: 1,
-    minHeight: 110,
+    minHeight: 68,
     borderRadius: 20,
     backgroundColor: "#D0D3D9",
     borderWidth: 1,
@@ -656,11 +703,12 @@ const styles = StyleSheet.create({
     width: "100%",
     alignItems: "center",
     justifyContent: "center",
-    paddingHorizontal: 12,
+    paddingHorizontal: 10,
+    paddingVertical: 0,
   },
   metricLabel: {
-    fontSize: 17,
-    lineHeight: 20,
+    fontSize: 13,
+    lineHeight: 15,
     fontWeight: "800",
     color: "#646C79",
     textAlign: "center",
@@ -674,107 +722,110 @@ const styles = StyleSheet.create({
     textAlign: "center",
   },
   speedOnlyValue: {
-    marginTop: 6,
-    fontSize: 38,
-    lineHeight: 42,
+    marginTop: 1,
+    fontSize: 33,
+    lineHeight: 37,
     fontWeight: "900",
     color: "#1C2430",
     textAlign: "center",
     letterSpacing: -1.2,
   },
   directionShell: {
-    flex: 1.08,
+    flex: 3.42,
   },
   directionCard: {
     flex: 1,
-    minHeight: 126,
-    borderRadius: 20,
-    backgroundColor: "#D0D3D9",
-    borderWidth: 1,
-    borderColor: "#ECEEF2",
+    minHeight: 428,
+    borderRadius: 30,
+    backgroundColor: "#D6DAE0",
+    borderWidth: 1.5,
+    borderColor: "#F7F9FC",
     alignItems: "center",
-    justifyContent: "center",
-    paddingTop: 0,
-    paddingBottom: 10,
-    shadowColor: "#F8FAFC",
+    justifyContent: "space-between",
+    paddingTop: 20,
+    paddingBottom: 24,
+    shadowColor: "#FFFFFF",
     shadowOpacity: 0.24,
-    shadowRadius: 6,
+    shadowRadius: 8,
     shadowOffset: { width: 0, height: -1 },
   },
-  directionArrow: {
-    fontWeight: "900",
-    color: "#DCE2EA",
-    textAlign: "center",
-    marginBottom: -18,
-    textShadowColor: "rgba(76, 85, 99, 0.45)",
-    textShadowOffset: { width: 0, height: 4 },
-    textShadowRadius: 4,
-    transform: [{ scaleX: 1.18 }, { scaleY: 1.08 }],
+  directionArrowWrap: {
+    flex: 1,
+    width: "100%",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingTop: 20,
+  },
+  directionArrowIcon: {
+    textShadowColor: "rgba(255, 255, 255, 0.34)",
+    textShadowOffset: { width: 0, height: 2 },
+    textShadowRadius: 3,
   },
   directionLabel: {
-    marginTop: -2,
-    fontSize: 40,
-    lineHeight: 44,
+    marginTop: 0,
+    marginBottom: 6,
+    fontSize: 52,
+    lineHeight: 56,
     fontWeight: "900",
-    color: "#2A313D",
+    color: "#18202C",
     textAlign: "center",
-    letterSpacing: -1.2,
+    letterSpacing: -0.9,
   },
   bottomBarShell: {
     position: "absolute",
-    left: 6,
-    right: 6,
-    bottom: 2,
+    left: 20,
+    right: 20,
+    bottom: 8,
     marginTop: 0,
-    borderRadius: 30,
-    padding: 4,
-    backgroundColor: "rgba(187, 193, 202, 0.58)",
-    borderWidth: 1.2,
-    borderColor: "rgba(250, 252, 255, 0.98)",
+    borderRadius: 16,
+    padding: 1,
+    backgroundColor: "rgba(187, 193, 202, 0.14)",
+    borderWidth: 0.7,
+    borderColor: "rgba(250, 252, 255, 0.72)",
     shadowColor: "#8D95A0",
-    shadowOpacity: 0.2,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 3 },
-    elevation: 3,
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    shadowOffset: { width: 0, height: 1 },
+    elevation: 1,
   },
   bottomBar: {
-    minHeight: 74,
-    borderRadius: 26,
-    backgroundColor: "rgba(229, 234, 240, 0.9)",
-    borderWidth: 1.2,
-    borderColor: "rgba(255, 255, 255, 0.99)",
+    minHeight: 38,
+    borderRadius: 14,
+    backgroundColor: "rgba(229, 234, 240, 0.34)",
+    borderWidth: 0.75,
+    borderColor: "rgba(255, 255, 255, 0.82)",
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingHorizontal: 10,
-    paddingVertical: 7,
-    gap: 10,
+    paddingHorizontal: 5,
+    paddingVertical: 2,
+    gap: 5,
   },
   bottomButton: {
     flex: 1,
-    minHeight: 60,
-    borderRadius: 20,
-    backgroundColor: "rgba(241, 244, 248, 0.96)",
-    borderWidth: 1,
-    borderColor: "rgba(255, 255, 255, 1)",
+    minHeight: 30,
+    borderRadius: 11,
+    backgroundColor: "rgba(241, 244, 248, 0.5)",
+    borderWidth: 0.9,
+    borderColor: "rgba(255, 255, 255, 0.92)",
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: 9,
+    gap: 4,
     shadowColor: "#FFFFFF",
-    shadowOpacity: 0.22,
-    shadowRadius: 6,
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
     shadowOffset: { width: 0, height: -1 },
   },
   bottomButtonPressed: {
-    opacity: 0.94,
-    transform: [{ scale: 0.99 }],
+    opacity: 0.82,
+    transform: [{ scale: 0.985 }],
   },
   bottomButtonText: {
-    fontSize: 17,
-    lineHeight: 20,
+    fontSize: 10,
+    lineHeight: 12,
     fontWeight: "900",
     color: "#27303B",
-    letterSpacing: -0.3,
+    letterSpacing: -0.1,
   },
 });
