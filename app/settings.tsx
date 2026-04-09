@@ -337,6 +337,7 @@ export default function SettingsScreen() {
   );
   const [redAlertBrightness, setRedAlertBrightness] = useState(DEFAULT_SETTINGS.redAlertBrightness);
   const [redAlertPeriodMs, setRedAlertPeriodMs] = useState(DEFAULT_SETTINGS.redAlertPeriodMs);
+  const [redAlertPreviewOn, setRedAlertPreviewOn] = useState(true);
   const [signalPriorityMode, setSignalPriorityMode] = useState<SignalPriorityMode>(
     DEFAULT_SETTINGS.signalPriorityMode,
   );
@@ -412,6 +413,20 @@ export default function SettingsScreen() {
     };
   }, []);
 
+  useEffect(() => {
+    if (redAlertIntensity === "off") {
+      setRedAlertPreviewOn(false);
+      return;
+    }
+
+    setRedAlertPreviewOn(true);
+    const interval = setInterval(() => {
+      setRedAlertPreviewOn((prev) => !prev);
+    }, Math.max(120, Math.round(redAlertPeriodMs / 2)));
+
+    return () => clearInterval(interval);
+  }, [redAlertIntensity, redAlertPeriodMs]);
+
   const patchHomeMasterSettings = useCallback((partial: Partial<HomeMasterSettings>) => {
     setHomeMasterSettings((prev) =>
       mergeHomeMasterSettings({
@@ -480,6 +495,19 @@ export default function SettingsScreen() {
 
   const redAlertBrightnessLabel = useMemo(() => `${Math.round(redAlertBrightness * 100)}%`, [redAlertBrightness]);
   const redAlertPeriodLabel = useMemo(() => `${Math.round(redAlertPeriodMs)}ms`, [redAlertPeriodMs]);
+  const redAlertPreviewOpacity = useMemo(() => {
+    const intensityMultiplier =
+      redAlertIntensity === "strong" ? 1 : redAlertIntensity === "balanced" ? 0.78 : 0.56;
+
+    return Number((redAlertBrightness * intensityMultiplier).toFixed(2));
+  }, [redAlertBrightness, redAlertIntensity]);
+  const redAlertPreviewStateLabel = useMemo(() => {
+    if (redAlertIntensity === "off") {
+      return "미리보기 OFF";
+    }
+
+    return `밝기 ${redAlertBrightnessLabel} · 주기 ${redAlertPeriodLabel}`;
+  }, [redAlertBrightnessLabel, redAlertIntensity, redAlertPeriodLabel]);
 
   const selectedPriorityLabel = useMemo(() => {
     return SIGNAL_PRIORITY_OPTIONS.find((option) => option.key === signalPriorityMode)?.title ?? "안전 우선";
@@ -897,6 +925,53 @@ export default function SettingsScreen() {
               onChange={setRedAlertPeriodMs}
               accentColor="#991B1B"
             />
+
+            <View style={styles.redAlertPreviewCard}>
+              <View style={styles.redAlertPreviewHeader}>
+                <View style={styles.redAlertPreviewTextGroup}>
+                  <Text style={styles.redAlertPreviewTitle}>즉시 미리보기</Text>
+                  <Text style={styles.redAlertPreviewDescription}>
+                    슬라이더를 움직이면 오른쪽 미니 화면이 현재 밝기와 주기대로 바로 반응합니다.
+                  </Text>
+                </View>
+                <View style={styles.redAlertPreviewBadge}>
+                  <Text style={styles.redAlertPreviewBadgeText}>{redAlertPreviewStateLabel}</Text>
+                </View>
+              </View>
+
+              <View style={styles.redAlertPreviewRow}>
+                <View style={styles.redAlertPreviewMiniScreen}>
+                  <View style={styles.redAlertPreviewSignalCard}>
+                    <Text style={styles.redAlertPreviewSignalTitle}>STOP</Text>
+                    <Text style={styles.redAlertPreviewSignalSubtitle}>적색 점멸 경고</Text>
+                  </View>
+                  <View
+                    style={[
+                      styles.redAlertPreviewOverlay,
+                      {
+                        opacity:
+                          redAlertIntensity === "off"
+                            ? 0
+                            : redAlertPreviewOn
+                              ? redAlertPreviewOpacity
+                              : 0.05,
+                      },
+                    ]}
+                  />
+                </View>
+
+                <View style={styles.redAlertPreviewMetricColumn}>
+                  <View style={styles.redAlertPreviewMetricCard}>
+                    <Text style={styles.redAlertPreviewMetricLabel}>최대 밝기</Text>
+                    <Text style={styles.redAlertPreviewMetricValue}>{redAlertBrightnessLabel}</Text>
+                  </View>
+                  <View style={styles.redAlertPreviewMetricCard}>
+                    <Text style={styles.redAlertPreviewMetricLabel}>점멸 주기</Text>
+                    <Text style={styles.redAlertPreviewMetricValue}>{redAlertPeriodLabel}</Text>
+                  </View>
+                </View>
+              </View>
+            </View>
           </View>
 
           <View style={styles.sectionCard}>
@@ -2053,6 +2128,121 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     backgroundColor: "#ffffff",
     borderWidth: 3,
+  },
+  redAlertPreviewCard: {
+    borderRadius: 22,
+    backgroundColor: "#fff6f7",
+    borderWidth: 1,
+    borderColor: "#f2c7cf",
+    padding: 14,
+    gap: 12,
+  },
+  redAlertPreviewHeader: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 10,
+  },
+  redAlertPreviewTextGroup: {
+    flex: 1,
+    gap: 4,
+  },
+  redAlertPreviewTitle: {
+    fontSize: 21,
+    fontWeight: "900",
+    color: "#7f1d1d",
+  },
+  redAlertPreviewDescription: {
+    fontSize: 15,
+    lineHeight: 21,
+    fontWeight: "600",
+    color: "#7c2d12",
+  },
+  redAlertPreviewBadge: {
+    maxWidth: 120,
+    borderRadius: 14,
+    backgroundColor: "#fee2e2",
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  redAlertPreviewBadgeText: {
+    fontSize: 14,
+    lineHeight: 18,
+    fontWeight: "900",
+    color: "#991b1b",
+    textAlign: "center",
+  },
+  redAlertPreviewRow: {
+    flexDirection: "row",
+    alignItems: "stretch",
+    gap: 12,
+  },
+  redAlertPreviewMiniScreen: {
+    flex: 1,
+    minHeight: 112,
+    borderRadius: 18,
+    overflow: "hidden",
+    backgroundColor: "#1f2937",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.42)",
+    justifyContent: "center",
+    padding: 14,
+  },
+  redAlertPreviewSignalCard: {
+    borderRadius: 16,
+    backgroundColor: "#ffe8ea",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.7)",
+    paddingVertical: 16,
+    paddingHorizontal: 12,
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+  },
+  redAlertPreviewSignalTitle: {
+    fontSize: 28,
+    lineHeight: 32,
+    fontWeight: "900",
+    letterSpacing: -0.8,
+    color: "#7f1d1d",
+  },
+  redAlertPreviewSignalSubtitle: {
+    fontSize: 14,
+    lineHeight: 18,
+    fontWeight: "700",
+    color: "#9f1239",
+  },
+  redAlertPreviewOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "#c41230",
+  },
+  redAlertPreviewMetricColumn: {
+    width: 106,
+    gap: 10,
+  },
+  redAlertPreviewMetricCard: {
+    flex: 1,
+    borderRadius: 16,
+    backgroundColor: "#ffffff",
+    borderWidth: 1,
+    borderColor: "#f1d3d8",
+    paddingHorizontal: 10,
+    paddingVertical: 12,
+    justifyContent: "center",
+    gap: 4,
+  },
+  redAlertPreviewMetricLabel: {
+    fontSize: 13,
+    lineHeight: 17,
+    fontWeight: "700",
+    color: "#6b7280",
+  },
+  redAlertPreviewMetricValue: {
+    fontSize: 20,
+    lineHeight: 24,
+    fontWeight: "900",
+    color: "#11181c",
   },
   selectionWrap: {
     gap: 10,
