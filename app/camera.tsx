@@ -1,19 +1,37 @@
 import MaterialIcons from "@expo/vector-icons/MaterialIcons";
+import { CameraView, useCameraPermissions } from "expo-camera";
 import { router } from "expo-router";
-import { useMemo, useState } from "react";
-import { Alert, Pressable, StyleSheet, Text, View } from "react-native";
+import { useEffect, useMemo, useRef, useState } from "react";
+import {
+  ActivityIndicator,
+  Alert,
+  Platform,
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
+} from "react-native";
 
 import { ScreenContainer } from "@/components/screen-container";
+import { trpc } from "@/lib/trpc";
+import {
+  type DetectionRange,
+  setTrafficSignalDetection,
+} from "@/lib/traffic-signal-store";
+import {
+  DEFAULT_VOICE_ALERT_SETTINGS,
+  speakVoiceAlert,
+} from "@/lib/voice-alerts";
 
-type DetectionRange = "좁게" | "보통" | "넓게";
-
-const RANGE_OPTIONS: Array<{
+type DetectionRangeOption = {
   key: DetectionRange;
   title: string;
   description: string;
   frameWidth: number;
   frameHeight: number;
-}> = [
+};
+
+const RANGE_OPTIONS: DetectionRangeOption[] = [
   {
     key: "좁게",
     title: "좁게",
@@ -37,12 +55,52 @@ const RANGE_OPTIONS: Array<{
   },
 ];
 
+const RANGE_FOCUS_HINT: Record<DetectionRange, string> = {
+  좁게: "정면 한 개 신호등에 초점을 맞춥니다",
+  보통: "교차로 전방 신호등을 균형 있게 확인합니다",
+  넓게: "여러 차선과 복수 신호등을 함께 살핍니다",
+};
+
+const RANGE_CROP: Record<DetectionRange, { widthRatio: number; heightRatio: number }> = {
+  좁게: { widthRatio: 0.28, heightRatio: 0.28 },
+  보통: { widthRatio: 0.4, heightRatio: 0.34 },
+  넓게: { widthRatio: 0.56, heightRatio: 0.4 },
+};
+
 export default function CameraScreen() {
   const [selectedRange, setSelectedRange] = useState<DetectionRange>("보통");
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [liveStatusText, setLiveStatusText] = useState("AI 인식 대기");
+  const [latestResultText, setLatestResultText] = useState("아직 인식된 신호가 없습니다.");
+  const [cameraReady, setCameraReady] = useState(false);
+  const [permission, requestPermission] = useCameraPermissions();
+  const cameraRef = useRef<CameraView | null>(null);
+  const lastDetectedStateRef = useRef<"red" | "yellow" | "green" | "unknown" | null>(null);
+
+  const detectSignal = trpc.trafficSignal.detect.useMutation();
 
   const currentRange = useMemo(() => {
     return RANGE_OPTIONS.find((option) => option.key === selectedRange) ?? RANGE_OPTIONS[1];
   }, [selectedRange]);
+
+  useEffect(() => {
+    return () => {
+      cameraRef.current = null;
+    };
+  }, []);
+
+  const ensurePermission = async () => {
+    if (!permission) {
+      return false;
+    }
+
+    if (permission.granted) {
+      return true;
+    }
+
+    const nextPermission = await requestPermission();
+    return nextPermission.granted;
+  };
 
   const handleConfirmRange = () => {
     Alert.alert("카메라 범위 적용", `${currentRange.title} 범위로 인식 영역을 맞췄습니다.`, [
@@ -50,6 +108,77 @@ export default function CameraScreen() {
         text: "확인",
       },
     ]);
+  };
+
+  const handleAnalyzeFrame = async () => {
+    if (Platform.OS === "web") {
+      Alert.alert("웹 미리보기 제한", "실제 카메라 인식은 모바일 기기에서 확인해 주세요.");
+      return;
+    }
+
+    const granted = await ensurePermission();
+    if (!granted) {
+      Alert.alert("카메라 권한 필요", "신호등 인식을 위해 카메라 권한을 허용해 주세요.");
+      return;
+    }
+
+    if (!cameraRef.current || !cameraReady || isAnalyzing) {
+      return;
+    }
+
+    try {
+      setIsAnalyzing(true);
+      setLiveStatusText("AI 신호등 판별 중");
+
+      const photo = await cameraRef.current.takePictureAsync({
+        base64: true,
+        quality: 0.45,
+        skipProcessing: true,
+      });
+
+      if (!photo?.base64) {
+        throw new Error("카메라 프레임을 가져오지 못했습니다.");
+      }
+
+      const crop = RANGE_CROP[selectedRange];
+      const result = await detectSignal.mutateAsync({
+        base64Image: photo.base64,
+        detectionRange: selectedRange,
+        cropHint: crop,
+      });
+
+      await setTrafficSignalDetection({
+        state: result.signalState,
+        confidence: result.confidence,
+        source: "camera-ai",
+        detectedAt: Date.now(),
+        summary: result.summary,
+      });
+
+      setLatestResultText(`${result.displayLabel} · 신뢰도 ${Math.round(result.confidence * 100)}%`);
+      setLiveStatusText(`실시간 인식: ${result.displayLabel}`);
+
+      const previousState = lastDetectedStateRef.current;
+      lastDetectedStateRef.current = result.signalState;
+
+      if (result.signalState !== previousState) {
+        if (result.signalState === "red") {
+          await speakVoiceAlert("red_signal_ahead", DEFAULT_VOICE_ALERT_SETTINGS, {
+            distanceMeters: 128,
+          });
+        } else if (result.signalState === "green") {
+          await speakVoiceAlert("green_signal_changed", DEFAULT_VOICE_ALERT_SETTINGS, {
+            distanceMeters: 128,
+          });
+        }
+      }
+    } catch (error) {
+      console.error("Failed to analyze traffic signal", error);
+      setLiveStatusText("AI 인식 실패");
+      Alert.alert("신호등 인식 실패", "카메라 프레임 분석 중 문제가 발생했습니다. 다시 시도해 주세요.");
+    } finally {
+      setIsAnalyzing(false);
+    }
   };
 
   return (
@@ -73,12 +202,32 @@ export default function CameraScreen() {
         <View style={styles.previewCard}>
           <View style={styles.previewTopRow}>
             <View style={styles.liveBadge}>
-              <Text style={styles.liveBadgeText}>AI 인식 대기</Text>
+              <Text style={styles.liveBadgeText}>{liveStatusText}</Text>
             </View>
             <Text style={styles.previewHint}>전방 신호등 중심으로 맞춰 주세요</Text>
           </View>
 
           <View style={styles.cameraStage}>
+            {permission?.granted && Platform.OS !== "web" ? (
+              <CameraView
+                ref={(instance) => {
+                  cameraRef.current = instance;
+                }}
+                style={StyleSheet.absoluteFillObject}
+                facing="back"
+                onCameraReady={() => setCameraReady(true)}
+              />
+            ) : (
+              <View style={styles.cameraFallbackLayer}>
+                <MaterialIcons name="photo-camera" size={42} color="#cbd5e1" />
+                <Text style={styles.cameraFallbackText}>
+                  {Platform.OS === "web"
+                    ? "웹 미리보기에서는 카메라 대신 안내 화면을 표시합니다"
+                    : "카메라 권한을 허용하면 실제 프리뷰가 시작됩니다"}
+                </Text>
+              </View>
+            )}
+
             <View
               style={[
                 styles.detectionFrame,
@@ -141,17 +290,44 @@ export default function CameraScreen() {
           <View style={styles.summaryCard}>
             <Text style={styles.summaryTitle}>현재 선택</Text>
             <Text style={styles.summaryValue}>{currentRange.title}</Text>
-            <Text style={styles.summaryDescription}>{currentRange.description}</Text>
+            <Text style={styles.summaryDescription}>{RANGE_FOCUS_HINT[currentRange.key]}</Text>
+            <Text style={styles.summaryMeta}>{latestResultText}</Text>
           </View>
         </View>
 
-        <Pressable
-          accessibilityRole="button"
-          onPress={handleConfirmRange}
-          style={({ pressed }) => [styles.confirmButton, pressed && styles.buttonPressed]}
-        >
-          <Text style={styles.confirmButtonText}>확인</Text>
-        </Pressable>
+        {!permission?.granted && Platform.OS !== "web" ? (
+          <Pressable
+            accessibilityRole="button"
+            onPress={requestPermission}
+            style={({ pressed }) => [styles.permissionButton, pressed && styles.buttonPressed]}
+          >
+            <Text style={styles.permissionButtonText}>카메라 권한 허용</Text>
+          </Pressable>
+        ) : null}
+
+        <View style={styles.actionRow}>
+          <Pressable
+            accessibilityRole="button"
+            onPress={handleConfirmRange}
+            style={({ pressed }) => [styles.secondaryButton, pressed && styles.buttonPressed]}
+          >
+            <Text style={styles.secondaryButtonText}>범위 적용</Text>
+          </Pressable>
+
+          <Pressable
+            accessibilityRole="button"
+            onPress={handleAnalyzeFrame}
+            disabled={isAnalyzing}
+            style={({ pressed }) => [
+              styles.confirmButton,
+              isAnalyzing && styles.confirmButtonDisabled,
+              pressed && styles.buttonPressed,
+            ]}
+          >
+            {isAnalyzing ? <ActivityIndicator color="#ffffff" /> : null}
+            <Text style={styles.confirmButtonText}>{isAnalyzing ? "인식 중" : "신호등 인식"}</Text>
+          </Pressable>
+        </View>
       </View>
     </ScreenContainer>
   );
@@ -235,6 +411,21 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     overflow: "hidden",
     position: "relative",
+  },
+  cameraFallbackLayer: {
+    ...StyleSheet.absoluteFillObject,
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 10,
+    paddingHorizontal: 24,
+    backgroundColor: "#111827",
+  },
+  cameraFallbackText: {
+    fontSize: 17,
+    lineHeight: 24,
+    fontWeight: "600",
+    color: "#e2e8f0",
+    textAlign: "center",
   },
   detectionFrame: {
     borderWidth: 2,
@@ -379,13 +570,55 @@ const styles = StyleSheet.create({
     lineHeight: 24,
     color: "#d1d5db",
   },
-  confirmButton: {
+  summaryMeta: {
+    marginTop: 4,
+    fontSize: 17,
+    fontWeight: "700",
+    color: "#93c5fd",
+  },
+  permissionButton: {
     marginTop: 14,
+    borderRadius: 24,
+    backgroundColor: "#0f172a",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 16,
+  },
+  permissionButtonText: {
+    fontSize: 22,
+    fontWeight: "bold",
+    color: "#ffffff",
+  },
+  actionRow: {
+    marginTop: 14,
+    flexDirection: "row",
+    gap: 12,
+  },
+  secondaryButton: {
+    flex: 1,
+    borderRadius: 24,
+    backgroundColor: "#dbe4f0",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 18,
+  },
+  secondaryButtonText: {
+    fontSize: 22,
+    fontWeight: "bold",
+    color: "#0f172a",
+  },
+  confirmButton: {
+    flex: 1.2,
     borderRadius: 24,
     backgroundColor: "#111827",
     alignItems: "center",
     justifyContent: "center",
+    flexDirection: "row",
+    gap: 8,
     paddingVertical: 18,
+  },
+  confirmButtonDisabled: {
+    opacity: 0.72,
   },
   confirmButtonText: {
     fontSize: 24,

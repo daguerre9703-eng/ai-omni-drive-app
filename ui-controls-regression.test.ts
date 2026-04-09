@@ -6,8 +6,7 @@ describe("camera and settings controls regression", () => {
   const cameraSource = readFileSync(join(process.cwd(), "app/camera.tsx"), "utf8");
   const settingsSource = readFileSync(join(process.cwd(), "app/settings.tsx"), "utf8");
 
-  it("keeps camera range controls and a visible confirm action", () => {
-    expect(cameraSource).toContain('type DetectionRange = "좁게" | "보통" | "넓게";');
+  it("keeps camera range controls and real signal recognition wiring", () => {
     expect(cameraSource).toContain('const RANGE_OPTIONS');
     expect(cameraSource).toContain('title: "좁게"');
     expect(cameraSource).toContain('title: "보통"');
@@ -16,8 +15,13 @@ describe("camera and settings controls regression", () => {
     expect(cameraSource).toContain('setSelectedRange(option.key)');
     expect(cameraSource).toContain('currentRange.frameWidth');
     expect(cameraSource).toContain('currentRange.frameHeight');
-    expect(cameraSource).toContain('handleConfirmRange');
-    expect(cameraSource).toContain('Text style={styles.confirmButtonText}>확인</Text>');
+    expect(cameraSource).toContain('trpc.trafficSignal.detect.useMutation()');
+    expect(cameraSource).toContain('takePictureAsync');
+    expect(cameraSource).toContain('setTrafficSignalDetection({');
+    expect(cameraSource).toContain('DEFAULT_VOICE_ALERT_SETTINGS');
+    expect(cameraSource).toContain('speakVoiceAlert("red_signal_ahead"');
+    expect(cameraSource).toContain('speakVoiceAlert("green_signal_changed"');
+    expect(cameraSource).toContain('Text style={styles.confirmButtonText}>{isAnalyzing ? "인식 중" : "신호등 인식"}</Text>');
   });
 
   it("keeps settings persistence and the main confirm button wired", () => {
@@ -50,6 +54,9 @@ describe("camera and settings controls regression", () => {
     expect(homeSource).toContain('voiceAlertLength');
     expect(homeSource).toContain('voiceAlertStyle');
     expect(homeSource).toContain('voicePreviewText');
+    expect(homeSource).toContain('subscribeTrafficSignalDetection');
+    expect(homeSource).toContain('loadTrafficSignalDetection');
+    expect(homeSource).toContain('liveSignalSummary');
     expect(voiceSource).toContain('export type VoiceAlertLength = "detailed" | "brief";');
     expect(voiceSource).toContain('export type VoiceAlertStyle = "standard" | "calm" | "urgent";');
     expect(voiceSource).toContain('export function buildVoiceAlertText(');

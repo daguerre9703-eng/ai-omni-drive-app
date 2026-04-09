@@ -24,8 +24,15 @@ import {
   type VoiceAlertLength,
   type VoiceAlertStyle,
 } from "@/lib/voice-alerts";
+import {
+  getTrafficSignalDetection,
+  loadTrafficSignalDetection,
+  subscribeTrafficSignalDetection,
+  type TrafficSignalState,
+} from "@/lib/traffic-signal-store";
 
 type SignalState = "red" | "yellow" | "green";
+type LiveSignalState = TrafficSignalState;
 type DirectionState = "left" | "straight" | "right" | "uturn";
 type NavigationProvider = "kakaomap" | "inavi" | "tmap";
 type ArrowSize = "large" | "xlarge" | "huge";
@@ -180,6 +187,8 @@ export default function HomeScreen() {
   const [distanceValue, setDistanceValue] = useState(GPS_ROUTE_POINTS[0].signalDistanceLabel);
   const [speedValue, setSpeedValue] = useState(GPS_ROUTE_POINTS[0].fallbackSpeedLabel);
   const [redAlertVisible, setRedAlertVisible] = useState(false);
+  const [liveSignalState, setLiveSignalState] = useState<LiveSignalState>(getTrafficSignalDetection().state);
+  const [liveSignalSummary, setLiveSignalSummary] = useState(getTrafficSignalDetection().summary);
   const [homeMasterSettings, setHomeMasterSettings] = useState<HomeMasterSettings>(DEFAULT_HOME_MASTER_SETTINGS);
   const routeIndexRef = useRef(0);
   const locationSubscriptionRef = useRef<Location.LocationSubscription | null>(null);
@@ -239,7 +248,21 @@ export default function HomeScreen() {
   }, [liveRouteSyncEnabled]);
 
   useEffect(() => {
-    const isRedSignal = SIGNAL_SEQUENCE[signalIndex] === "red";
+    const unsubscribe = subscribeTrafficSignalDetection((detection) => {
+      setLiveSignalState(detection.state);
+      setLiveSignalSummary(detection.summary);
+    });
+
+    loadTrafficSignalDetection().catch((error) => {
+      console.error("Failed to hydrate traffic signal detection", error);
+    });
+
+    return unsubscribe;
+  }, []);
+
+  useEffect(() => {
+    const nextSignalState = liveSignalState !== "unknown" ? liveSignalState : SIGNAL_SEQUENCE[signalIndex];
+    const isRedSignal = nextSignalState === "red";
 
     if (!isRedSignal) {
       setRedAlertVisible(false);
@@ -252,7 +275,7 @@ export default function HomeScreen() {
     }, 260);
 
     return () => clearInterval(interval);
-  }, [signalIndex]);
+  }, [liveSignalState, signalIndex]);
 
   useEffect(() => {
     const startGpsSync = async () => {
@@ -303,7 +326,8 @@ export default function HomeScreen() {
     };
   }, [liveRouteSyncEnabled]);
 
-  const currentSignalState = SIGNAL_SEQUENCE[signalIndex];
+  const currentSignalState: SignalState =
+    liveSignalState !== "unknown" ? liveSignalState : SIGNAL_SEQUENCE[signalIndex];
   const currentSignal = useMemo(() => SIGNAL_META[currentSignalState], [currentSignalState]);
   const isRedSignal = currentSignalState === "red";
   const voicePreviewText = useMemo(() => {
@@ -311,8 +335,9 @@ export default function HomeScreen() {
       return "음성 안내 꺼짐";
     }
 
-    return buildVoiceAlertText(
-      SIGNAL_SEQUENCE[signalIndex] === "green" ? "green_signal_changed" : "red_signal_ahead",
+      return buildVoiceAlertText(
+      currentSignalState === "green" ? "green_signal_changed" : "red_signal_ahead",
+
       {
         enabled: voiceGuideEnabled,
         length: voiceAlertLength,
@@ -320,7 +345,7 @@ export default function HomeScreen() {
       },
       { distanceMeters: GPS_ROUTE_POINTS[routeIndexRef.current % GPS_ROUTE_POINTS.length]?.signalDistanceMeters ?? 128 },
     );
-  }, [signalIndex, voiceGuideEnabled, voiceAlertLength, voiceAlertStyle]);
+  }, [currentSignalState, voiceGuideEnabled, voiceAlertLength, voiceAlertStyle]);
   const currentDirection = useMemo(
     () => DIRECTION_META[DIRECTION_SEQUENCE[directionIndex] ?? "straight"],
     [directionIndex],
@@ -415,7 +440,7 @@ export default function HomeScreen() {
                   },
                 ]}
               >
-                {distanceValue}
+                {liveSignalState !== "unknown" ? liveSignalSummary : distanceValue}
               </Text>
             </View>
           </View>
