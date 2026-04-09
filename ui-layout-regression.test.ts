@@ -67,12 +67,14 @@ describe("home hud layout regression", () => {
   it("strengthens the ruby red full-screen warning blink for stop state", () => {
     expect(homeSource).toContain('const [redAlertVisible, setRedAlertVisible] = useState(false);');
     expect(homeSource).toContain('backgroundColor: "#C41230"');
-    expect(homeSource).toContain('redAlertIntensity === "soft" ? 420 : redAlertIntensity === "strong" ? 170 : 260');
+    expect(homeSource).toContain('const [redAlertBrightness, setRedAlertBrightness] = useState(DEFAULT_SETTINGS.redAlertBrightness);');
+    expect(homeSource).toContain('const [redAlertPeriodMs, setRedAlertPeriodMs] = useState(DEFAULT_SETTINGS.redAlertPeriodMs);');
+    expect(homeSource).toContain('const intervalMs = Math.max(120, Math.round(redAlertPeriodMs));');
     expect(homeSource).toContain('setRedAlertVisible((prev) => !prev);');
-    expect(homeSource).toContain('return redAlertVisible ? 0.42 : 0.08;');
-    expect(homeSource).toContain('return redAlertVisible ? 0.68 : 0.14;');
-    expect(homeSource).toContain('return redAlertVisible ? 0.18 : 0.03;');
-    expect(homeSource).toContain('opacity: 0.54');
-    expect(homeSource).toContain('opacity: 0.08');
+    expect(homeSource).toContain('const activeOpacity = Math.min(0.92, Number((redAlertBrightness * intensityMultiplier).toFixed(2)));');
+    expect(homeSource).toContain('const idleOpacity = Math.min(0.24, Number((activeOpacity * 0.18).toFixed(2)));');
+    expect(homeSource).toContain('return redAlertVisible ? activeOpacity : idleOpacity;');
+    expect(homeSource).toContain('밝기 {redAlertBrightnessLabel}');
+    expect(homeSource).toContain('주기 {redAlertPeriodLabel}');
   });
 });

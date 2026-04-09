@@ -59,6 +59,8 @@ type AppSettings = {
   hapticAlertsEnabled: boolean;
   lowVisionModeEnabled: boolean;
   redAlertIntensity: RedAlertIntensity;
+  redAlertBrightness: number;
+  redAlertPeriodMs: number;
   signalPriorityMode: SignalPriorityMode;
   sensitivityMode: SensitivityMode;
   selectedNavigationProvider: NavigationProvider;
@@ -81,6 +83,8 @@ const DEFAULT_SETTINGS: AppSettings = {
   hapticAlertsEnabled: true,
   lowVisionModeEnabled: true,
   redAlertIntensity: "balanced",
+  redAlertBrightness: 0.42,
+  redAlertPeriodMs: 260,
   signalPriorityMode: "safety-first",
   sensitivityMode: "standard",
   selectedNavigationProvider: "tmap",
@@ -331,6 +335,8 @@ export default function SettingsScreen() {
   const [redAlertIntensity, setRedAlertIntensity] = useState<RedAlertIntensity>(
     DEFAULT_SETTINGS.redAlertIntensity,
   );
+  const [redAlertBrightness, setRedAlertBrightness] = useState(DEFAULT_SETTINGS.redAlertBrightness);
+  const [redAlertPeriodMs, setRedAlertPeriodMs] = useState(DEFAULT_SETTINGS.redAlertPeriodMs);
   const [signalPriorityMode, setSignalPriorityMode] = useState<SignalPriorityMode>(
     DEFAULT_SETTINGS.signalPriorityMode,
   );
@@ -375,6 +381,8 @@ export default function SettingsScreen() {
           setHapticAlertsEnabled(parsed.hapticAlertsEnabled ?? DEFAULT_SETTINGS.hapticAlertsEnabled);
           setLowVisionModeEnabled(parsed.lowVisionModeEnabled ?? DEFAULT_SETTINGS.lowVisionModeEnabled);
           setRedAlertIntensity(parsed.redAlertIntensity ?? DEFAULT_SETTINGS.redAlertIntensity);
+          setRedAlertBrightness(parsed.redAlertBrightness ?? DEFAULT_SETTINGS.redAlertBrightness);
+          setRedAlertPeriodMs(parsed.redAlertPeriodMs ?? DEFAULT_SETTINGS.redAlertPeriodMs);
           setSignalPriorityMode(parsed.signalPriorityMode ?? DEFAULT_SETTINGS.signalPriorityMode);
           setSensitivityMode(parsed.sensitivityMode ?? DEFAULT_SETTINGS.sensitivityMode);
           setSelectedNavigationProvider(
@@ -469,6 +477,9 @@ export default function SettingsScreen() {
   const selectedRedAlertLabel = useMemo(() => {
     return RED_ALERT_INTENSITY_OPTIONS.find((option) => option.key === redAlertIntensity)?.title ?? "균형형";
   }, [redAlertIntensity]);
+
+  const redAlertBrightnessLabel = useMemo(() => `${Math.round(redAlertBrightness * 100)}%`, [redAlertBrightness]);
+  const redAlertPeriodLabel = useMemo(() => `${Math.round(redAlertPeriodMs)}ms`, [redAlertPeriodMs]);
 
   const selectedPriorityLabel = useMemo(() => {
     return SIGNAL_PRIORITY_OPTIONS.find((option) => option.key === signalPriorityMode)?.title ?? "안전 우선";
@@ -632,6 +643,8 @@ export default function SettingsScreen() {
       hapticAlertsEnabled,
       lowVisionModeEnabled,
       redAlertIntensity,
+      redAlertBrightness,
+      redAlertPeriodMs,
       signalPriorityMode,
       sensitivityMode,
       selectedNavigationProvider,
@@ -694,7 +707,7 @@ export default function SettingsScreen() {
             <Text style={styles.summaryTitle}>현재 연동 상태</Text>
             <Text style={styles.summaryValue}>{currentProviderLabel}</Text>
             <Text style={styles.summaryDescription}>
-              음성 길이 {selectedLengthLabel} · 음성 스타일 {selectedStyleLabel} · 적색 경고 {selectedRedAlertLabel} · {selectedPriorityLabel} · {selectedSensitivityLabel} 기준으로 안내 문구를 조합합니다.
+              음성 길이 {selectedLengthLabel} · 음성 스타일 {selectedStyleLabel} · 적색 경고 {selectedRedAlertLabel} · 밝기 {redAlertBrightnessLabel} · 주기 {redAlertPeriodLabel} · {selectedPriorityLabel} · {selectedSensitivityLabel} 기준으로 안내 문구를 조합합니다.
             </Text>
           </View>
 
@@ -860,6 +873,30 @@ export default function SettingsScreen() {
                 );
               })}
             </View>
+
+            <SliderControl
+              title="점멸 밝기"
+              description="최대 점멸 순간의 화면 붉은 오버레이 밝기를 조절합니다. 낮을수록 눈부심이 줄고, 높을수록 경고성이 강해집니다."
+              min={0.12}
+              max={0.8}
+              step={0.02}
+              value={redAlertBrightness}
+              displayValue={redAlertBrightnessLabel}
+              onChange={setRedAlertBrightness}
+              accentColor="#C41230"
+            />
+
+            <SliderControl
+              title="점멸 주기"
+              description="붉은 경고가 반복되는 속도를 조절합니다. 값이 작을수록 더 빠르게 점멸하고, 클수록 천천히 점멸합니다."
+              min={120}
+              max={600}
+              step={20}
+              value={redAlertPeriodMs}
+              displayValue={redAlertPeriodLabel}
+              onChange={setRedAlertPeriodMs}
+              accentColor="#991B1B"
+            />
           </View>
 
           <View style={styles.sectionCard}>

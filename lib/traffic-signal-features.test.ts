@@ -33,12 +33,30 @@ describe("traffic signal feature regressions", () => {
     expect(homeSource).toContain('const RED_ALERT_LABEL');
     expect(homeSource).toContain('const PRIORITY_MODE_LABEL');
     expect(homeSource).toContain('const SENSITIVITY_MODE_LABEL');
-    expect(homeSource).toContain('redAlertIntensity === "soft" ? 420 : redAlertIntensity === "strong" ? 170 : 260');
-    expect(homeSource).toContain('return redAlertVisible ? 0.68 : 0.14;');
-    expect(homeSource).toContain('return redAlertVisible ? 0.18 : 0.03;');
+    expect(homeSource).toContain('const [redAlertBrightness, setRedAlertBrightness] = useState(DEFAULT_SETTINGS.redAlertBrightness);');
+    expect(homeSource).toContain('const [redAlertPeriodMs, setRedAlertPeriodMs] = useState(DEFAULT_SETTINGS.redAlertPeriodMs);');
+    expect(homeSource).toContain('const intervalMs = Math.max(120, Math.round(redAlertPeriodMs));');
+    expect(homeSource).toContain('const activeOpacity = Math.min(0.92, Number((redAlertBrightness * intensityMultiplier).toFixed(2)));');
     expect(homeSource).toContain('{RED_ALERT_LABEL[redAlertIntensity]}');
+    expect(homeSource).toContain('밝기 {redAlertBrightnessLabel}');
+    expect(homeSource).toContain('주기 {redAlertPeriodLabel}');
     expect(homeSource).toContain('{PRIORITY_MODE_LABEL[signalPriorityMode]}');
     expect(homeSource).toContain('{SENSITIVITY_MODE_LABEL[sensitivityMode]}');
+  });
+
+  it("adds independent brightness and period controls to settings persistence", () => {
+    expect(settingsSource).toContain('redAlertBrightness: number;');
+    expect(settingsSource).toContain('redAlertPeriodMs: number;');
+    expect(settingsSource).toContain('redAlertBrightness: 0.42');
+    expect(settingsSource).toContain('redAlertPeriodMs: 260');
+    expect(settingsSource).toContain('setRedAlertBrightness(parsed.redAlertBrightness ?? DEFAULT_SETTINGS.redAlertBrightness);');
+    expect(settingsSource).toContain('setRedAlertPeriodMs(parsed.redAlertPeriodMs ?? DEFAULT_SETTINGS.redAlertPeriodMs);');
+    expect(settingsSource).toContain('title="점멸 밝기"');
+    expect(settingsSource).toContain('title="점멸 주기"');
+    expect(settingsSource).toContain('onChange={setRedAlertBrightness}');
+    expect(settingsSource).toContain('onChange={setRedAlertPeriodMs}');
+    expect(settingsSource).toContain('redAlertBrightness,');
+    expect(settingsSource).toContain('redAlertPeriodMs,');
   });
 
   it("keeps settings and server prompt aligned with refined priority and sensitivity modes", () => {

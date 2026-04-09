@@ -53,6 +53,8 @@ type AppSettings = {
   hapticAlertsEnabled: boolean;
   lowVisionModeEnabled: boolean;
   redAlertIntensity: RedAlertIntensity;
+  redAlertBrightness: number;
+  redAlertPeriodMs: number;
   signalPriorityMode: SignalPriorityMode;
   sensitivityMode: SensitivityMode;
 };
@@ -81,6 +83,8 @@ const DEFAULT_SETTINGS: AppSettings = {
   hapticAlertsEnabled: true,
   lowVisionModeEnabled: true,
   redAlertIntensity: "balanced",
+  redAlertBrightness: 0.42,
+  redAlertPeriodMs: 260,
   signalPriorityMode: "safety-first",
   sensitivityMode: "standard",
 };
@@ -116,6 +120,22 @@ const SENSITIVITY_MODE_LABEL: Record<SensitivityMode, string> = {
   rain: "우천 고감도",
   auto: "자동 적응",
 };
+
+function getRedAlertIntensityMultiplier(intensity: RedAlertIntensity) {
+  if (intensity === "soft") {
+    return 0.58;
+  }
+
+  if (intensity === "strong") {
+    return 1.28;
+  }
+
+  if (intensity === "off") {
+    return 0;
+  }
+
+  return 1;
+}
 
 const GPS_ROUTE_POINTS: RoutePoint[] = [
   {
@@ -275,6 +295,8 @@ export default function HomeScreen() {
   const [hapticAlertsEnabled, setHapticAlertsEnabled] = useState(DEFAULT_SETTINGS.hapticAlertsEnabled);
   const [lowVisionModeEnabled, setLowVisionModeEnabled] = useState(DEFAULT_SETTINGS.lowVisionModeEnabled);
   const [redAlertIntensity, setRedAlertIntensity] = useState<RedAlertIntensity>(DEFAULT_SETTINGS.redAlertIntensity);
+  const [redAlertBrightness, setRedAlertBrightness] = useState(DEFAULT_SETTINGS.redAlertBrightness);
+  const [redAlertPeriodMs, setRedAlertPeriodMs] = useState(DEFAULT_SETTINGS.redAlertPeriodMs);
   const [signalPriorityMode, setSignalPriorityMode] = useState<SignalPriorityMode>(DEFAULT_SETTINGS.signalPriorityMode);
   const [sensitivityMode, setSensitivityMode] = useState<SensitivityMode>(DEFAULT_SETTINGS.sensitivityMode);
   const [distanceValue, setDistanceValue] = useState(GPS_ROUTE_POINTS[0].signalDistanceLabel);
@@ -320,6 +342,8 @@ export default function HomeScreen() {
         setHapticAlertsEnabled(parsed.hapticAlertsEnabled ?? DEFAULT_SETTINGS.hapticAlertsEnabled);
         setLowVisionModeEnabled(parsed.lowVisionModeEnabled ?? DEFAULT_SETTINGS.lowVisionModeEnabled);
         setRedAlertIntensity(parsed.redAlertIntensity ?? DEFAULT_SETTINGS.redAlertIntensity);
+        setRedAlertBrightness(parsed.redAlertBrightness ?? DEFAULT_SETTINGS.redAlertBrightness);
+        setRedAlertPeriodMs(parsed.redAlertPeriodMs ?? DEFAULT_SETTINGS.redAlertPeriodMs);
         setSignalPriorityMode(parsed.signalPriorityMode ?? DEFAULT_SETTINGS.signalPriorityMode);
         setSensitivityMode(parsed.sensitivityMode ?? DEFAULT_SETTINGS.sensitivityMode);
       }
@@ -393,8 +417,7 @@ export default function HomeScreen() {
       return;
     }
 
-    const intervalMs =
-      redAlertIntensity === "soft" ? 420 : redAlertIntensity === "strong" ? 170 : 260;
+    const intervalMs = Math.max(120, Math.round(redAlertPeriodMs));
 
     setRedAlertVisible(true);
     const interval = setInterval(() => {
@@ -402,7 +425,7 @@ export default function HomeScreen() {
     }, intervalMs);
 
     return () => clearInterval(interval);
-  }, [liveSignalState, redAlertIntensity, signalIndex]);
+  }, [liveSignalState, redAlertIntensity, redAlertPeriodMs, signalIndex]);
 
   useEffect(() => {
     const startGpsSync = async () => {
@@ -484,16 +507,14 @@ export default function HomeScreen() {
       return 0;
     }
 
-    if (redAlertIntensity === "soft") {
-      return redAlertVisible ? 0.18 : 0.03;
-    }
+    const intensityMultiplier = getRedAlertIntensityMultiplier(redAlertIntensity);
+    const activeOpacity = Math.min(0.92, Number((redAlertBrightness * intensityMultiplier).toFixed(2)));
+    const idleOpacity = Math.min(0.24, Number((activeOpacity * 0.18).toFixed(2)));
 
-    if (redAlertIntensity === "strong") {
-      return redAlertVisible ? 0.68 : 0.14;
-    }
-
-    return redAlertVisible ? 0.42 : 0.08;
-  }, [redAlertIntensity, redAlertVisible]);
+    return redAlertVisible ? activeOpacity : idleOpacity;
+  }, [redAlertBrightness, redAlertIntensity, redAlertVisible]);
+  const redAlertBrightnessLabel = useMemo(() => `${Math.round(redAlertBrightness * 100)}%`, [redAlertBrightness]);
+  const redAlertPeriodLabel = useMemo(() => `${Math.round(redAlertPeriodMs)}ms`, [redAlertPeriodMs]);
   const lastAnalyzedLabel = useMemo(() => formatHudTime(lastAnalyzedAt), [lastAnalyzedAt]);
   const lastDetectedLabel = useMemo(() => formatHudTime(lastDetectedAt), [lastDetectedAt]);
   const arrowFontSize = ARROW_FONT_SIZE[arrowSize];
@@ -629,6 +650,16 @@ export default function HomeScreen() {
                 <View style={styles.signalModeChip}>
                   <Text style={[styles.signalModeChipText, lowVisionModeEnabled && styles.signalModeChipTextLowVision]}>
                     {RED_ALERT_LABEL[redAlertIntensity]}
+                  </Text>
+                </View>
+                <View style={styles.signalModeChip}>
+                  <Text style={[styles.signalModeChipText, lowVisionModeEnabled && styles.signalModeChipTextLowVision]}>
+                    밝기 {redAlertBrightnessLabel}
+                  </Text>
+                </View>
+                <View style={styles.signalModeChip}>
+                  <Text style={[styles.signalModeChipText, lowVisionModeEnabled && styles.signalModeChipTextLowVision]}>
+                    주기 {redAlertPeriodLabel}
                   </Text>
                 </View>
               </View>
