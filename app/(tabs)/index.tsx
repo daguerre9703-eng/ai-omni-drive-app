@@ -451,20 +451,21 @@ export default function HomeScreen() {
               >
                 {currentSignal.title}
               </Text>
-              <Text
-                style={[
-                  styles.signalDistanceValue,
-                  {
-                    fontSize: homeMasterSettings.sizes.distanceValue,
-                    lineHeight: homeMasterSettings.sizes.distanceValue + 4,
-                    fontFamily: sharedFontFamily,
-                    fontWeight: sharedFontWeight,
-                  },
-                ]}
-              >
+              {isSignalInactive ? <View style={styles.signalDistanceSpacer} /> : (
+                <Text
+                  style={[
+                    styles.signalDistanceValue,
+                    {
+                      fontSize: homeMasterSettings.sizes.distanceValue,
+                      lineHeight: homeMasterSettings.sizes.distanceValue + 4,
+                      fontFamily: sharedFontFamily,
+                      fontWeight: sharedFontWeight,
+                    },
+                  ]}
+                >
                   {displayedDistanceValue}
-
-              </Text>
+                </Text>
+              )}
             </View>
           </View>
 
@@ -696,6 +697,10 @@ const styles = StyleSheet.create({
     color: "#111111",
     textAlign: "center",
     letterSpacing: -2.6,
+  },
+  signalDistanceSpacer: {
+    height: 76,
+    marginTop: 20,
   },
   infoCard: {
     flex: 1,

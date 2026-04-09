@@ -34,6 +34,8 @@ describe("home hud layout regression", () => {
     expect(homeSource).toContain('const [distanceValue, setDistanceValue] = useState("--");');
     expect(homeSource).toContain('const [speedValue, setSpeedValue] = useState("0 km/h");');
     expect(homeSource).toContain('displayedDistanceValue = isSignalInactive ? "--" : distanceValue');
+    expect(homeSource).toContain('isSignalInactive ? <View style={styles.signalDistanceSpacer} />');
+    expect(homeSource).toContain('signalDistanceSpacer');
     expect(homeSource).toContain('현재 속도');
     expect(homeSource).toContain('speedOnlyColumn');
     expect(homeSource).toContain('speedOnlyValue');
