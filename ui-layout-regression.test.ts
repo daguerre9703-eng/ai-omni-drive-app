@@ -68,13 +68,11 @@ describe("home hud layout regression", () => {
     expect(homeSource).toContain('fontSize: 52');
   });
 
-  it("preserves gps linked updates and auto-hiding translucent bottom controls", () => {
+  it("preserves gps linked updates and always-visible translucent bottom controls", () => {
     expect(homeSource).toContain('Location.watchPositionAsync');
     expect(homeSource).toContain('selectedNavigationProvider');
-    expect(homeSource).toContain('const [bottomBarVisible, setBottomBarVisible] = useState(false);');
+    expect(homeSource).toContain('const [bottomBarVisible, setBottomBarVisible] = useState(true);');
     expect(homeSource).toContain('const revealBottomBar = useCallback(() => {');
-    expect(homeSource).toContain('setTimeout(() => {');
-    expect(homeSource).toContain('setBottomBarVisible(false);');
     expect(homeSource).toContain('onTouchStart={revealBottomBar}');
     expect(homeSource).toContain('router.push("/camera")');
     expect(homeSource).toContain('router.push("/settings")');

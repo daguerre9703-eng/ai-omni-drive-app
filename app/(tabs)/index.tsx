@@ -187,7 +187,7 @@ export default function HomeScreen() {
   const [speedValue, setSpeedValue] = useState("0 km/h");
   const [redAlertVisible, setRedAlertVisible] = useState(false);
   const [homeMasterSettings, setHomeMasterSettings] = useState<HomeMasterSettings>(DEFAULT_HOME_MASTER_SETTINGS);
-  const [bottomBarVisible, setBottomBarVisible] = useState(false);
+  const [bottomBarVisible, setBottomBarVisible] = useState(true);
   const routeIndexRef = useRef(0);
   const locationSubscriptionRef = useRef<Location.LocationSubscription | null>(null);
   const bottomBarHideTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -351,12 +351,10 @@ export default function HomeScreen() {
   const revealBottomBar = useCallback(() => {
     if (bottomBarHideTimeoutRef.current) {
       clearTimeout(bottomBarHideTimeoutRef.current);
+      bottomBarHideTimeoutRef.current = null;
     }
 
     setBottomBarVisible(true);
-    bottomBarHideTimeoutRef.current = setTimeout(() => {
-      setBottomBarVisible(false);
-    }, 2200);
   }, []);
   const arrowFontSize = ARROW_FONT_SIZE[arrowSize];
   const sharedFontFamily = getFontFamilyForPreset(homeMasterSettings.fontPreset);
