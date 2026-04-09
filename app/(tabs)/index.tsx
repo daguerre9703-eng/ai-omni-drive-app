@@ -28,6 +28,8 @@ import {
   getTrafficSignalDetection,
   loadTrafficSignalDetection,
   subscribeTrafficSignalDetection,
+  type LeftTurnSignalState,
+  type PedestrianSignalState,
   type TrafficSignalState,
 } from "@/lib/traffic-signal-store";
 
@@ -169,6 +171,42 @@ const DIRECTION_META: Record<
   },
 };
 
+const LEFT_TURN_META: Record<LeftTurnSignalState, { label: string; backgroundColor: string; textColor: string }> = {
+  go: {
+    label: "좌회전 가능",
+    backgroundColor: "#DDFCE3",
+    textColor: "#166534",
+  },
+  stop: {
+    label: "좌회전 대기",
+    backgroundColor: "#F3F4F6",
+    textColor: "#374151",
+  },
+  unknown: {
+    label: "좌회전 미확인",
+    backgroundColor: "#E5E7EB",
+    textColor: "#4B5563",
+  },
+};
+
+const PEDESTRIAN_META: Record<PedestrianSignalState, { label: string; backgroundColor: string; textColor: string }> = {
+  walk: {
+    label: "보행 가능",
+    backgroundColor: "#DCFCE7",
+    textColor: "#166534",
+  },
+  stop: {
+    label: "보행 정지",
+    backgroundColor: "#FEE2E2",
+    textColor: "#991B1B",
+  },
+  unknown: {
+    label: "보행 미확인",
+    backgroundColor: "#E5E7EB",
+    textColor: "#4B5563",
+  },
+};
+
 export default function HomeScreen() {
   const [signalIndex, setSignalIndex] = useState(1);
   const [directionIndex, setDirectionIndex] = useState(0);
@@ -188,6 +226,12 @@ export default function HomeScreen() {
   const [speedValue, setSpeedValue] = useState(GPS_ROUTE_POINTS[0].fallbackSpeedLabel);
   const [redAlertVisible, setRedAlertVisible] = useState(false);
   const [liveSignalState, setLiveSignalState] = useState<LiveSignalState>(getTrafficSignalDetection().state);
+  const [liveLeftTurnState, setLiveLeftTurnState] = useState<LeftTurnSignalState>(
+    getTrafficSignalDetection().leftTurnState,
+  );
+  const [livePedestrianState, setLivePedestrianState] = useState<PedestrianSignalState>(
+    getTrafficSignalDetection().pedestrianState,
+  );
   const [liveSignalSummary, setLiveSignalSummary] = useState(getTrafficSignalDetection().summary);
   const [homeMasterSettings, setHomeMasterSettings] = useState<HomeMasterSettings>(DEFAULT_HOME_MASTER_SETTINGS);
   const routeIndexRef = useRef(0);
@@ -250,6 +294,8 @@ export default function HomeScreen() {
   useEffect(() => {
     const unsubscribe = subscribeTrafficSignalDetection((detection) => {
       setLiveSignalState(detection.state);
+      setLiveLeftTurnState(detection.leftTurnState);
+      setLivePedestrianState(detection.pedestrianState);
       setLiveSignalSummary(detection.summary);
     });
 
@@ -350,6 +396,8 @@ export default function HomeScreen() {
     () => DIRECTION_META[DIRECTION_SEQUENCE[directionIndex] ?? "straight"],
     [directionIndex],
   );
+  const currentLeftTurnMeta = useMemo(() => LEFT_TURN_META[liveLeftTurnState], [liveLeftTurnState]);
+  const currentPedestrianMeta = useMemo(() => PEDESTRIAN_META[livePedestrianState], [livePedestrianState]);
   const arrowFontSize = ARROW_FONT_SIZE[arrowSize];
   const sharedFontFamily = getFontFamilyForPreset(homeMasterSettings.fontPreset);
   const sharedFontWeight = getFontWeightForPreset(homeMasterSettings.fontPreset);
@@ -442,6 +490,18 @@ export default function HomeScreen() {
               >
                 {liveSignalState !== "unknown" ? liveSignalSummary : distanceValue}
               </Text>
+              <View style={styles.signalAssistRow}>
+                <View style={[styles.signalAssistChip, { backgroundColor: currentLeftTurnMeta.backgroundColor }]}>
+                  <Text style={[styles.signalAssistText, { color: currentLeftTurnMeta.textColor }]}>
+                    {currentLeftTurnMeta.label}
+                  </Text>
+                </View>
+                <View style={[styles.signalAssistChip, { backgroundColor: currentPedestrianMeta.backgroundColor }]}>
+                  <Text style={[styles.signalAssistText, { color: currentPedestrianMeta.textColor }]}>
+                    {currentPedestrianMeta.label}
+                  </Text>
+                </View>
+              </View>
             </View>
           </View>
 
@@ -653,6 +713,28 @@ const styles = StyleSheet.create({
     color: "#111111",
     textAlign: "center",
     letterSpacing: -2.6,
+  },
+  signalAssistRow: {
+    marginTop: 16,
+    flexDirection: "row",
+    gap: 10,
+    paddingHorizontal: 12,
+  },
+  signalAssistChip: {
+    flex: 1,
+    minHeight: 40,
+    borderRadius: 14,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+  },
+  signalAssistText: {
+    fontSize: 16,
+    lineHeight: 20,
+    fontWeight: "900",
+    textAlign: "center",
+    letterSpacing: -0.2,
   },
   infoCard: {
     flex: 1,

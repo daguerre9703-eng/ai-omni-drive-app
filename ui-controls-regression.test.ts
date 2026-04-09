@@ -18,6 +18,9 @@ describe("camera and settings controls regression", () => {
     expect(cameraSource).toContain('trpc.trafficSignal.detect.useMutation()');
     expect(cameraSource).toContain('takePictureAsync');
     expect(cameraSource).toContain('setTrafficSignalDetection({');
+    expect(cameraSource).toContain('leftTurnState: result.leftTurnState');
+    expect(cameraSource).toContain('pedestrianState: result.pedestrianState');
+    expect(cameraSource).toContain('setLatestDetailText(`${result.leftTurnLabel} · ${result.pedestrianLabel}`);');
     expect(cameraSource).toContain('DEFAULT_VOICE_ALERT_SETTINGS');
     expect(cameraSource).toContain('speakVoiceAlert("red_signal_ahead"');
     expect(cameraSource).toContain('speakVoiceAlert("green_signal_changed"');
@@ -57,6 +60,12 @@ describe("camera and settings controls regression", () => {
     expect(homeSource).toContain('subscribeTrafficSignalDetection');
     expect(homeSource).toContain('loadTrafficSignalDetection');
     expect(homeSource).toContain('liveSignalSummary');
+    expect(homeSource).toContain('liveLeftTurnState');
+    expect(homeSource).toContain('livePedestrianState');
+    expect(homeSource).toContain('LEFT_TURN_META');
+    expect(homeSource).toContain('PEDESTRIAN_META');
+    expect(homeSource).toContain('currentLeftTurnMeta.label');
+    expect(homeSource).toContain('currentPedestrianMeta.label');
     expect(voiceSource).toContain('export type VoiceAlertLength = "detailed" | "brief";');
     expect(voiceSource).toContain('export type VoiceAlertStyle = "standard" | "calm" | "urgent";');
     expect(voiceSource).toContain('export function buildVoiceAlertText(');

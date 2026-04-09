@@ -1,10 +1,14 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
 export type TrafficSignalState = "red" | "yellow" | "green" | "unknown";
+export type LeftTurnSignalState = "go" | "stop" | "unknown";
+export type PedestrianSignalState = "walk" | "stop" | "unknown";
 export type DetectionRange = "좁게" | "보통" | "넓게";
 
 export type TrafficSignalDetection = {
   state: TrafficSignalState;
+  leftTurnState: LeftTurnSignalState;
+  pedestrianState: PedestrianSignalState;
   confidence: number;
   source: "camera-ai" | "fallback" | "manual";
   detectedAt: number;
@@ -15,6 +19,8 @@ export const TRAFFIC_SIGNAL_STORAGE_KEY = "ai-omni-drive:traffic-signal";
 
 export const DEFAULT_TRAFFIC_SIGNAL_DETECTION: TrafficSignalDetection = {
   state: "yellow",
+  leftTurnState: "unknown",
+  pedestrianState: "unknown",
   confidence: 0,
   source: "fallback",
   detectedAt: 0,
@@ -25,11 +31,37 @@ const listeners = new Set<(value: TrafficSignalDetection) => void>();
 
 let currentDetection: TrafficSignalDetection = DEFAULT_TRAFFIC_SIGNAL_DETECTION;
 
+function normalizeTrafficSignalState(value?: string | null): TrafficSignalState {
+  if (value === "red" || value === "yellow" || value === "green") {
+    return value;
+  }
+
+  return "unknown";
+}
+
+function normalizeLeftTurnSignalState(value?: string | null): LeftTurnSignalState {
+  if (value === "go" || value === "stop") {
+    return value;
+  }
+
+  return "unknown";
+}
+
+function normalizePedestrianSignalState(value?: string | null): PedestrianSignalState {
+  if (value === "walk" || value === "stop") {
+    return value;
+  }
+
+  return "unknown";
+}
+
 function normalizeDetection(
   value?: Partial<TrafficSignalDetection> | null,
 ): TrafficSignalDetection {
   return {
-    state: value?.state ?? DEFAULT_TRAFFIC_SIGNAL_DETECTION.state,
+    state: normalizeTrafficSignalState(value?.state),
+    leftTurnState: normalizeLeftTurnSignalState(value?.leftTurnState),
+    pedestrianState: normalizePedestrianSignalState(value?.pedestrianState),
     confidence:
       typeof value?.confidence === "number" && Number.isFinite(value.confidence)
         ? Math.min(1, Math.max(0, value.confidence))

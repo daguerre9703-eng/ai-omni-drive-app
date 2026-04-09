@@ -72,6 +72,7 @@ export default function CameraScreen() {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [liveStatusText, setLiveStatusText] = useState("AI 인식 대기");
   const [latestResultText, setLatestResultText] = useState("아직 인식된 신호가 없습니다.");
+  const [latestDetailText, setLatestDetailText] = useState("좌회전·보행 신호 대기");
   const [cameraReady, setCameraReady] = useState(false);
   const [permission, requestPermission] = useCameraPermissions();
   const cameraRef = useRef<CameraView | null>(null);
@@ -149,6 +150,8 @@ export default function CameraScreen() {
 
       await setTrafficSignalDetection({
         state: result.signalState,
+        leftTurnState: result.leftTurnState,
+        pedestrianState: result.pedestrianState,
         confidence: result.confidence,
         source: "camera-ai",
         detectedAt: Date.now(),
@@ -156,6 +159,7 @@ export default function CameraScreen() {
       });
 
       setLatestResultText(`${result.displayLabel} · 신뢰도 ${Math.round(result.confidence * 100)}%`);
+      setLatestDetailText(`${result.leftTurnLabel} · ${result.pedestrianLabel}`);
       setLiveStatusText(`실시간 인식: ${result.displayLabel}`);
 
       const previousState = lastDetectedStateRef.current;
@@ -292,6 +296,7 @@ export default function CameraScreen() {
             <Text style={styles.summaryValue}>{currentRange.title}</Text>
             <Text style={styles.summaryDescription}>{RANGE_FOCUS_HINT[currentRange.key]}</Text>
             <Text style={styles.summaryMeta}>{latestResultText}</Text>
+            <Text style={styles.summarySubMeta}>{latestDetailText}</Text>
           </View>
         </View>
 
@@ -575,6 +580,11 @@ const styles = StyleSheet.create({
     fontSize: 17,
     fontWeight: "700",
     color: "#93c5fd",
+  },
+  summarySubMeta: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: "#cbd5e1",
   },
   permissionButton: {
     marginTop: 14,

@@ -4,6 +4,8 @@ import { invokeLLM } from "./_core/llm";
 import { publicProcedure, router } from "./_core/trpc";
 
 type SignalState = "red" | "yellow" | "green" | "unknown";
+type LeftTurnSignalState = "go" | "stop" | "unknown";
+type PedestrianSignalState = "walk" | "stop" | "unknown";
 
 const detectTrafficSignalInput = z.object({
   base64Image: z.string().min(100),
@@ -21,8 +23,36 @@ const SIGNAL_LABELS: Record<SignalState, string> = {
   unknown: "SLOW",
 };
 
+const LEFT_TURN_LABELS: Record<LeftTurnSignalState, string> = {
+  go: "좌회전 가능",
+  stop: "좌회전 대기",
+  unknown: "좌회전 미확인",
+};
+
+const PEDESTRIAN_LABELS: Record<PedestrianSignalState, string> = {
+  walk: "보행 가능",
+  stop: "보행 정지",
+  unknown: "보행 미확인",
+};
+
 const coerceSignalState = (value: string): SignalState => {
   if (value === "red" || value === "yellow" || value === "green") {
+    return value;
+  }
+
+  return "unknown";
+};
+
+const coerceLeftTurnState = (value: string): LeftTurnSignalState => {
+  if (value === "go" || value === "stop") {
+    return value;
+  }
+
+  return "unknown";
+};
+
+const coercePedestrianState = (value: string): PedestrianSignalState => {
+  if (value === "walk" || value === "stop") {
     return value;
   }
 
@@ -36,14 +66,14 @@ export const trafficSignalRouter = router({
         {
           role: "system",
           content:
-            "당신은 운전 보조 비전 모델입니다. 사진 속 교차로 신호등의 주된 색상을 red, yellow, green, unknown 중 하나로만 판단합니다. 차량 HUD용이므로 가장 운전자에게 relevant한 전방 신호등 하나를 우선 해석하고, 확신이 낮으면 unknown을 선택합니다.",
+            "당신은 운전 보조 비전 모델입니다. 사진 속 전방 교차로 신호를 분석합니다. 반드시 일반 차량 신호(mainSignal), 좌회전 화살표(leftTurnSignal), 보행자 신호(pedestrianSignal)를 각각 독립적으로 판단하세요. 확신이 낮거나 보이지 않으면 unknown을 선택합니다. 응답은 반드시 지정된 JSON 스키마만 사용합니다.",
         },
         {
           role: "user",
           content: [
             {
               type: "text",
-              text: `카메라 인식 범위는 ${input.detectionRange}입니다. 중앙 시야의 전방 신호등 상태를 판별하고 JSON으로만 응답하세요. crop hint width=${input.cropHint.widthRatio}, height=${input.cropHint.heightRatio}`,
+              text: `카메라 인식 범위는 ${input.detectionRange}입니다. 중앙 시야 전방의 일반 차량 신호(red/yellow/green/unknown), 좌회전 화살표(go/stop/unknown), 보행자 신호(walk/stop/unknown)를 각각 판별하고 JSON으로만 응답하세요. crop hint width=${input.cropHint.widthRatio}, height=${input.cropHint.heightRatio}`,
             },
             {
               type: "image_url",
@@ -68,6 +98,14 @@ export const trafficSignalRouter = router({
                 type: "string",
                 enum: ["red", "yellow", "green", "unknown"],
               },
+              leftTurnState: {
+                type: "string",
+                enum: ["go", "stop", "unknown"],
+              },
+              pedestrianState: {
+                type: "string",
+                enum: ["walk", "stop", "unknown"],
+              },
               confidence: {
                 type: "number",
                 minimum: 0,
@@ -77,30 +115,38 @@ export const trafficSignalRouter = router({
                 type: "string",
               },
             },
-            required: ["signalState", "confidence", "summary"],
+            required: ["signalState", "leftTurnState", "pedestrianState", "confidence", "summary"],
           },
         },
       },
-      maxTokens: 180,
+      maxTokens: 220,
     });
 
     const rawContent = response.choices[0]?.message.content;
     const contentText = typeof rawContent === "string" ? rawContent : "{}";
     const parsed = JSON.parse(contentText) as {
       signalState?: string;
+      leftTurnState?: string;
+      pedestrianState?: string;
       confidence?: number;
       summary?: string;
     };
 
     const signalState = coerceSignalState(parsed.signalState ?? "unknown");
+    const leftTurnState = coerceLeftTurnState(parsed.leftTurnState ?? "unknown");
+    const pedestrianState = coercePedestrianState(parsed.pedestrianState ?? "unknown");
     const confidence = Math.min(1, Math.max(0, Number(parsed.confidence ?? 0)));
     const summary = (parsed.summary ?? "신호 판별 결과 없음").trim() || "신호 판별 결과 없음";
 
     return {
       signalState,
+      leftTurnState,
+      pedestrianState,
       confidence,
       summary,
       displayLabel: SIGNAL_LABELS[signalState],
+      leftTurnLabel: LEFT_TURN_LABELS[leftTurnState],
+      pedestrianLabel: PEDESTRIAN_LABELS[pedestrianState],
     } as const;
   }),
 });
