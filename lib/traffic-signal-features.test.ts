@@ -30,14 +30,20 @@ describe("traffic signal feature regressions", () => {
     expect(cameraSource).toContain('priorityMode: signalPriorityMode');
     expect(cameraSource).toContain('sensitivityMode,');
     expect(cameraSource).toContain('supplementalText = result.prioritySummary');
+    expect(homeSource).toContain('type RedAlertEnvironmentPreset = "standard" | "night" | "rain" | "fog" | "custom";');
     expect(homeSource).toContain('const RED_ALERT_LABEL');
+    expect(homeSource).toContain('const RED_ALERT_ENVIRONMENT_LABEL');
     expect(homeSource).toContain('const PRIORITY_MODE_LABEL');
     expect(homeSource).toContain('const SENSITIVITY_MODE_LABEL');
+    expect(homeSource).toContain('const [redAlertEnvironmentPreset, setRedAlertEnvironmentPreset] = useState<RedAlertEnvironmentPreset>(');
     expect(homeSource).toContain('const [redAlertBrightness, setRedAlertBrightness] = useState(DEFAULT_SETTINGS.redAlertBrightness);');
     expect(homeSource).toContain('const [redAlertPeriodMs, setRedAlertPeriodMs] = useState(DEFAULT_SETTINGS.redAlertPeriodMs);');
+    expect(homeSource).toContain('setRedAlertEnvironmentPreset(');
+    expect(homeSource).toContain('const redAlertPresetLabel = useMemo(');
     expect(homeSource).toContain('const intervalMs = Math.max(120, Math.round(redAlertPeriodMs));');
     expect(homeSource).toContain('const activeOpacity = Math.min(0.92, Number((redAlertBrightness * intensityMultiplier).toFixed(2)));');
     expect(homeSource).toContain('{RED_ALERT_LABEL[redAlertIntensity]}');
+    expect(homeSource).toContain('{redAlertPresetLabel}');
     expect(homeSource).toContain('밝기 {redAlertBrightnessLabel}');
     expect(homeSource).toContain('주기 {redAlertPeriodLabel}');
     expect(homeSource).toContain('{PRIORITY_MODE_LABEL[signalPriorityMode]}');
@@ -45,22 +51,28 @@ describe("traffic signal feature regressions", () => {
   });
 
   it("adds independent brightness and period controls to settings persistence", () => {
+    expect(settingsSource).toContain('redAlertEnvironmentPreset: RedAlertEnvironmentPreset;');
     expect(settingsSource).toContain('redAlertBrightness: number;');
     expect(settingsSource).toContain('redAlertPeriodMs: number;');
+    expect(settingsSource).toContain('redAlertEnvironmentPreset: "standard"');
     expect(settingsSource).toContain('redAlertBrightness: 0.42');
     expect(settingsSource).toContain('redAlertPeriodMs: 260');
     expect(settingsSource).toContain('const [redAlertPreviewOn, setRedAlertPreviewOn] = useState(true);');
+    expect(settingsSource).toContain('applyRedAlertEnvironmentPreset');
+    expect(settingsSource).toContain('setRedAlertEnvironmentPreset("custom");');
     expect(settingsSource).toContain('setInterval(() => {');
     expect(settingsSource).toContain('setRedAlertPreviewOn((prev) => !prev);');
     expect(settingsSource).toContain('Math.max(120, Math.round(redAlertPeriodMs / 2))');
     expect(settingsSource).toContain('const redAlertPreviewOpacity = useMemo(() => {');
     expect(settingsSource).toContain('const redAlertPreviewStateLabel = useMemo(() => {');
+    expect(settingsSource).toContain('parsed.redAlertEnvironmentPreset ?? DEFAULT_SETTINGS.redAlertEnvironmentPreset');
     expect(settingsSource).toContain('setRedAlertBrightness(parsed.redAlertBrightness ?? DEFAULT_SETTINGS.redAlertBrightness);');
     expect(settingsSource).toContain('setRedAlertPeriodMs(parsed.redAlertPeriodMs ?? DEFAULT_SETTINGS.redAlertPeriodMs);');
+    expect(settingsSource).toContain('RED_ALERT_ENVIRONMENT_PRESET_OPTIONS');
     expect(settingsSource).toContain('title="점멸 밝기"');
     expect(settingsSource).toContain('title="점멸 주기"');
-    expect(settingsSource).toContain('onChange={setRedAlertBrightness}');
-    expect(settingsSource).toContain('onChange={setRedAlertPeriodMs}');
+    expect(settingsSource).toContain('onChange={handleRedAlertBrightnessChange}');
+    expect(settingsSource).toContain('onChange={handleRedAlertPeriodChange}');
     expect(settingsSource).toContain('즉시 미리보기');
     expect(settingsSource).toContain('슬라이더를 움직이면 오른쪽 미니 화면이 현재 밝기와 주기대로 바로 반응합니다.');
     expect(settingsSource).toContain('styles.redAlertPreviewCard');
@@ -73,11 +85,14 @@ describe("traffic signal feature regressions", () => {
 
   it("keeps settings and server prompt aligned with refined priority and sensitivity modes", () => {
     expect(settingsSource).toContain('RED_ALERT_INTENSITY_OPTIONS');
+    expect(settingsSource).toContain('RED_ALERT_ENVIRONMENT_PRESET_OPTIONS');
     expect(settingsSource).toContain('SIGNAL_PRIORITY_OPTIONS');
     expect(settingsSource).toContain('SENSITIVITY_MODE_OPTIONS');
     expect(settingsSource).toContain('setRedAlertIntensity(option.key)');
+    expect(settingsSource).toContain('applyRedAlertEnvironmentPreset(option.key)');
     expect(settingsSource).toContain('setSignalPriorityMode(option.key)');
     expect(settingsSource).toContain('setSensitivityMode(option.key)');
+    expect(settingsSource).toContain('야간, 우천, 안개 같은 운전 환경에 맞는 추천 조합');
     expect(serverSource).toContain('const PRIORITY_MODE_LABELS');
     expect(serverSource).toContain('const SENSITIVITY_LABELS');
     expect(serverSource).toContain('function buildPrioritySummary(');

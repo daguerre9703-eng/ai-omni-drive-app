@@ -41,6 +41,7 @@ type LiveSignalState = TrafficSignalState;
 type DirectionState = "left" | "straight" | "right" | "uturn";
 type NavigationProvider = "kakaomap" | "inavi" | "tmap";
 type ArrowSize = "large" | "xlarge" | "huge";
+type RedAlertEnvironmentPreset = "standard" | "night" | "rain" | "fog" | "custom";
 
 type AppSettings = {
   voiceGuideEnabled: boolean;
@@ -53,6 +54,7 @@ type AppSettings = {
   hapticAlertsEnabled: boolean;
   lowVisionModeEnabled: boolean;
   redAlertIntensity: RedAlertIntensity;
+  redAlertEnvironmentPreset: RedAlertEnvironmentPreset;
   redAlertBrightness: number;
   redAlertPeriodMs: number;
   signalPriorityMode: SignalPriorityMode;
@@ -83,6 +85,7 @@ const DEFAULT_SETTINGS: AppSettings = {
   hapticAlertsEnabled: true,
   lowVisionModeEnabled: true,
   redAlertIntensity: "balanced",
+  redAlertEnvironmentPreset: "standard",
   redAlertBrightness: 0.42,
   redAlertPeriodMs: 260,
   signalPriorityMode: "safety-first",
@@ -106,6 +109,14 @@ const RED_ALERT_LABEL: Record<RedAlertIntensity, string> = {
   soft: "점멸 약함",
   balanced: "점멸 균형",
   strong: "점멸 강함",
+};
+
+const RED_ALERT_ENVIRONMENT_LABEL: Record<RedAlertEnvironmentPreset, string> = {
+  standard: "표준 주간",
+  night: "야간 도로",
+  rain: "우천 반사",
+  fog: "안개·흐림",
+  custom: "직접 조절",
 };
 
 const PRIORITY_MODE_LABEL: Record<SignalPriorityMode, string> = {
@@ -295,6 +306,9 @@ export default function HomeScreen() {
   const [hapticAlertsEnabled, setHapticAlertsEnabled] = useState(DEFAULT_SETTINGS.hapticAlertsEnabled);
   const [lowVisionModeEnabled, setLowVisionModeEnabled] = useState(DEFAULT_SETTINGS.lowVisionModeEnabled);
   const [redAlertIntensity, setRedAlertIntensity] = useState<RedAlertIntensity>(DEFAULT_SETTINGS.redAlertIntensity);
+  const [redAlertEnvironmentPreset, setRedAlertEnvironmentPreset] = useState<RedAlertEnvironmentPreset>(
+    DEFAULT_SETTINGS.redAlertEnvironmentPreset,
+  );
   const [redAlertBrightness, setRedAlertBrightness] = useState(DEFAULT_SETTINGS.redAlertBrightness);
   const [redAlertPeriodMs, setRedAlertPeriodMs] = useState(DEFAULT_SETTINGS.redAlertPeriodMs);
   const [signalPriorityMode, setSignalPriorityMode] = useState<SignalPriorityMode>(DEFAULT_SETTINGS.signalPriorityMode);
@@ -342,6 +356,9 @@ export default function HomeScreen() {
         setHapticAlertsEnabled(parsed.hapticAlertsEnabled ?? DEFAULT_SETTINGS.hapticAlertsEnabled);
         setLowVisionModeEnabled(parsed.lowVisionModeEnabled ?? DEFAULT_SETTINGS.lowVisionModeEnabled);
         setRedAlertIntensity(parsed.redAlertIntensity ?? DEFAULT_SETTINGS.redAlertIntensity);
+        setRedAlertEnvironmentPreset(
+          parsed.redAlertEnvironmentPreset ?? DEFAULT_SETTINGS.redAlertEnvironmentPreset,
+        );
         setRedAlertBrightness(parsed.redAlertBrightness ?? DEFAULT_SETTINGS.redAlertBrightness);
         setRedAlertPeriodMs(parsed.redAlertPeriodMs ?? DEFAULT_SETTINGS.redAlertPeriodMs);
         setSignalPriorityMode(parsed.signalPriorityMode ?? DEFAULT_SETTINGS.signalPriorityMode);
@@ -515,6 +532,10 @@ export default function HomeScreen() {
   }, [redAlertBrightness, redAlertIntensity, redAlertVisible]);
   const redAlertBrightnessLabel = useMemo(() => `${Math.round(redAlertBrightness * 100)}%`, [redAlertBrightness]);
   const redAlertPeriodLabel = useMemo(() => `${Math.round(redAlertPeriodMs)}ms`, [redAlertPeriodMs]);
+  const redAlertPresetLabel = useMemo(
+    () => RED_ALERT_ENVIRONMENT_LABEL[redAlertEnvironmentPreset],
+    [redAlertEnvironmentPreset],
+  );
   const lastAnalyzedLabel = useMemo(() => formatHudTime(lastAnalyzedAt), [lastAnalyzedAt]);
   const lastDetectedLabel = useMemo(() => formatHudTime(lastDetectedAt), [lastDetectedAt]);
   const arrowFontSize = ARROW_FONT_SIZE[arrowSize];
@@ -654,6 +675,11 @@ export default function HomeScreen() {
                 </View>
                 <View style={styles.signalModeChip}>
                   <Text style={[styles.signalModeChipText, lowVisionModeEnabled && styles.signalModeChipTextLowVision]}>
+                    {redAlertPresetLabel}
+                  </Text>
+                </View>
+                <View style={styles.signalModeChip}>
+                  <Text style={[styles.signalModeChipText, lowVisionModeEnabled && styles.signalModeChipTextLowVision]}>
                     밝기 {redAlertBrightnessLabel}
                   </Text>
                 </View>
@@ -698,7 +724,7 @@ export default function HomeScreen() {
                 <View style={styles.monitoringInfoBox}>
                   <Text style={[styles.monitoringInfoLabel, lowVisionModeEnabled && styles.monitoringInfoLabelLowVision]}>인식 모드</Text>
                   <Text style={[styles.monitoringInfoValue, lowVisionModeEnabled && styles.monitoringInfoValueLowVision]}>
-                    {PRIORITY_MODE_LABEL[signalPriorityMode]} · {SENSITIVITY_MODE_LABEL[sensitivityMode]}
+                    {PRIORITY_MODE_LABEL[signalPriorityMode]} · {SENSITIVITY_MODE_LABEL[sensitivityMode]} · {redAlertPresetLabel}
                   </Text>
                 </View>
               </View>
