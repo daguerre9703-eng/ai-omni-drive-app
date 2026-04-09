@@ -8,6 +8,17 @@ import { Pressable, StyleSheet, Text, View } from "react-native";
 
 import { ScreenContainer } from "@/components/screen-container";
 import {
+  DEFAULT_HOME_MASTER_SETTINGS,
+  HOME_MASTER_STORAGE_KEY,
+  getFontFamilyForPreset,
+  getFontWeightForPreset,
+  getGrayBackgroundColor,
+  getShellOverlayColor,
+  getSignalGlowOpacity,
+  mergeHomeMasterSettings,
+  type HomeMasterSettings,
+} from "@/lib/home-master-settings";
+import {
   DEFAULT_VOICE_ALERT_SETTINGS,
   buildVoiceAlertText,
   type VoiceAlertLength,
@@ -169,26 +180,33 @@ export default function HomeScreen() {
   const [distanceValue, setDistanceValue] = useState(GPS_ROUTE_POINTS[0].signalDistanceLabel);
   const [speedValue, setSpeedValue] = useState(GPS_ROUTE_POINTS[0].fallbackSpeedLabel);
   const [redAlertVisible, setRedAlertVisible] = useState(false);
+  const [homeMasterSettings, setHomeMasterSettings] = useState<HomeMasterSettings>(DEFAULT_HOME_MASTER_SETTINGS);
   const routeIndexRef = useRef(0);
   const locationSubscriptionRef = useRef<Location.LocationSubscription | null>(null);
 
   const loadSettings = useCallback(async () => {
     try {
-      const savedValue = await AsyncStorage.getItem(SETTINGS_STORAGE_KEY);
+      const [savedValue, savedHomeMasterValue] = await Promise.all([
+        AsyncStorage.getItem(SETTINGS_STORAGE_KEY),
+        AsyncStorage.getItem(HOME_MASTER_STORAGE_KEY),
+      ]);
 
-      if (!savedValue) {
-        return;
+      if (savedValue) {
+        const parsed = JSON.parse(savedValue) as Partial<AppSettings>;
+        setVoiceGuideEnabled(parsed.voiceGuideEnabled ?? DEFAULT_SETTINGS.voiceGuideEnabled);
+        setVoiceAlertLength(parsed.voiceAlertLength ?? DEFAULT_SETTINGS.voiceAlertLength);
+        setVoiceAlertStyle(parsed.voiceAlertStyle ?? DEFAULT_SETTINGS.voiceAlertStyle);
+        setSelectedNavigationProvider(
+          parsed.selectedNavigationProvider ?? DEFAULT_SETTINGS.selectedNavigationProvider,
+        );
+        setArrowSize(parsed.arrowSize ?? DEFAULT_SETTINGS.arrowSize);
+        setLiveRouteSyncEnabled(parsed.liveRouteSyncEnabled ?? DEFAULT_SETTINGS.liveRouteSyncEnabled);
       }
 
-      const parsed = JSON.parse(savedValue) as Partial<AppSettings>;
-      setVoiceGuideEnabled(parsed.voiceGuideEnabled ?? DEFAULT_SETTINGS.voiceGuideEnabled);
-      setVoiceAlertLength(parsed.voiceAlertLength ?? DEFAULT_SETTINGS.voiceAlertLength);
-      setVoiceAlertStyle(parsed.voiceAlertStyle ?? DEFAULT_SETTINGS.voiceAlertStyle);
-      setSelectedNavigationProvider(
-        parsed.selectedNavigationProvider ?? DEFAULT_SETTINGS.selectedNavigationProvider,
-      );
-      setArrowSize(parsed.arrowSize ?? DEFAULT_SETTINGS.arrowSize);
-      setLiveRouteSyncEnabled(parsed.liveRouteSyncEnabled ?? DEFAULT_SETTINGS.liveRouteSyncEnabled);
+      if (savedHomeMasterValue) {
+        const parsedHomeMasterValue = JSON.parse(savedHomeMasterValue) as Partial<HomeMasterSettings>;
+        setHomeMasterSettings(mergeHomeMasterSettings(parsedHomeMasterValue));
+      }
     } catch (error) {
       console.error("Failed to load home settings", error);
     }
@@ -308,20 +326,49 @@ export default function HomeScreen() {
     [directionIndex],
   );
   const arrowFontSize = ARROW_FONT_SIZE[arrowSize];
+  const sharedFontFamily = getFontFamilyForPreset(homeMasterSettings.fontPreset);
+  const sharedFontWeight = getFontWeightForPreset(homeMasterSettings.fontPreset);
+  const dynamicBackgroundColor = getGrayBackgroundColor(
+    homeMasterSettings.theme.backgroundGrayLightness,
+    homeMasterSettings.theme.backgroundGraySaturation,
+  );
+  const dynamicShellColor = getShellOverlayColor(
+    homeMasterSettings.theme.backgroundGrayLightness,
+    homeMasterSettings.theme.backgroundGraySaturation,
+    homeMasterSettings.theme.hudShellOpacity,
+  );
+  const dynamicSignalGlow = useMemo(() => {
+    if (currentSignalState === "red") {
+      return `rgba(196, 18, 48, ${getSignalGlowOpacity(0.38, homeMasterSettings.signalGlow.red)})`;
+    }
+
+    if (currentSignalState === "green") {
+      return `rgba(126, 243, 107, ${getSignalGlowOpacity(0.24, homeMasterSettings.signalGlow.green)})`;
+    }
+
+    return currentSignal.glow;
+  }, [currentSignal.glow, currentSignalState, homeMasterSettings.signalGlow.green, homeMasterSettings.signalGlow.red]);
+  const shellTransform = (key: keyof HomeMasterSettings["positions"]) => ({
+    transform: [
+      { translateX: homeMasterSettings.positions[key].x },
+      { translateY: homeMasterSettings.positions[key].y + homeMasterSettings.verticalBalance },
+    ],
+  });
 
   const handleAdvanceDirection = () => {
     setDirectionIndex((prev) => (prev + 1) % DIRECTION_SEQUENCE.length);
   };
 
   return (
-    <ScreenContainer style={styles.screenContent}>
-      <View style={styles.root}>
+    <ScreenContainer style={[styles.screenContent, { backgroundColor: dynamicBackgroundColor }]}> 
+      <View style={[styles.root, { backgroundColor: dynamicBackgroundColor }]}>
         {isRedSignal ? (
           <View
             pointerEvents="none"
             style={[
               styles.redAlertOverlay,
               redAlertVisible ? styles.redAlertOverlayVisible : styles.redAlertOverlayHidden,
+              { opacity: redAlertVisible ? getSignalGlowOpacity(0.54, homeMasterSettings.signalGlow.red) : 0.08 },
             ]}
           />
         ) : null}
@@ -331,28 +378,75 @@ export default function HomeScreen() {
           </View>
         </View>
 
-        <View style={styles.mainStack}>
-          <View style={[styles.cardShell, styles.signalShell]}>
+          <View style={styles.mainStack}>
+          <View style={[styles.cardShell, styles.signalShell, shellTransform("signal")]}>
+
             <View
               accessibilityLabel={voicePreviewText}
               style={[
                 styles.signalCard,
                 {
                   backgroundColor: currentSignal.cardBackground,
-                  shadowColor: currentSignal.glow,
+                  shadowColor: dynamicSignalGlow,
                 },
               ]}
             >
-              <Text style={styles.signalTitle}>{currentSignal.title}</Text>
-              <Text style={styles.signalDistanceValue}>{distanceValue}</Text>
+              <Text
+                style={[
+                  styles.signalTitle,
+                  {
+                    fontSize: homeMasterSettings.sizes.signalTitle,
+                    lineHeight: homeMasterSettings.sizes.signalTitle + 4,
+                    fontFamily: sharedFontFamily,
+                    fontWeight: sharedFontWeight,
+                  },
+                ]}
+              >
+                {currentSignal.title}
+              </Text>
+              <Text
+                style={[
+                  styles.signalDistanceValue,
+                  {
+                    fontSize: homeMasterSettings.sizes.distanceValue,
+                    lineHeight: homeMasterSettings.sizes.distanceValue + 4,
+                    fontFamily: sharedFontFamily,
+                    fontWeight: sharedFontWeight,
+                  },
+                ]}
+              >
+                {distanceValue}
+              </Text>
             </View>
           </View>
 
-          <View style={[styles.cardShell, styles.infoShell]}>
-            <View style={styles.infoCard}>
+          <View style={[styles.cardShell, styles.infoShell, shellTransform("speed")]}> 
+            <View style={[styles.infoCard, { backgroundColor: dynamicShellColor }]}> 
               <View style={styles.speedOnlyColumn}>
-                <Text style={styles.metricLabel}>현재 속도</Text>
-                <Text style={styles.speedOnlyValue}>{speedValue}</Text>
+                <Text
+                  style={[
+                    styles.metricLabel,
+                    {
+                      fontFamily: sharedFontFamily,
+                      fontWeight: sharedFontWeight,
+                    },
+                  ]}
+                >
+                  현재 속도
+                </Text>
+                <Text
+                  style={[
+                    styles.speedOnlyValue,
+                    {
+                      fontSize: homeMasterSettings.sizes.speedValue,
+                      lineHeight: homeMasterSettings.sizes.speedValue + 4,
+                      fontFamily: sharedFontFamily,
+                      fontWeight: sharedFontWeight,
+                    },
+                  ]}
+                >
+                  {speedValue}
+                </Text>
               </View>
             </View>
           </View>
@@ -361,24 +455,47 @@ export default function HomeScreen() {
             accessibilityRole="button"
             accessibilityLabel="내비게이션 방향 전환"
             onPress={handleAdvanceDirection}
-            style={({ pressed }) => [styles.cardShell, styles.directionShell, pressed && styles.pressedCardShell]}
+            style={({ pressed }) => [
+              styles.cardShell,
+              styles.directionShell,
+              shellTransform("direction"),
+              pressed && styles.pressedCardShell,
+            ]}
           >
-            <View style={styles.directionCard}>
+            <View style={[styles.directionCard, { backgroundColor: dynamicShellColor }]}> 
               <Text
                 style={[
                   styles.directionArrow,
-                  { fontSize: Math.round(arrowFontSize * 2.35), lineHeight: Math.round(arrowFontSize * 2.35) + 10 },
+                  {
+                    fontSize: Math.round(arrowFontSize * 2.35 * homeMasterSettings.sizes.directionArrow),
+                    lineHeight: Math.round(arrowFontSize * 2.35 * homeMasterSettings.sizes.directionArrow) + 10,
+                    fontFamily: sharedFontFamily,
+                    textShadowColor: "rgba(255,255,255,0.32)",
+                    transform: [{ scaleX: 1.34 }, { scaleY: 1.12 }],
+                  },
                 ]}
               >
                 {currentDirection.symbol}
               </Text>
-              <Text style={styles.directionLabel}>{currentDirection.label}</Text>
+              <Text
+                style={[
+                  styles.directionLabel,
+                  {
+                    fontSize: homeMasterSettings.sizes.directionLabel,
+                    lineHeight: homeMasterSettings.sizes.directionLabel + 4,
+                    fontFamily: sharedFontFamily,
+                    fontWeight: sharedFontWeight,
+                  },
+                ]}
+              >
+                {currentDirection.label}
+              </Text>
             </View>
           </Pressable>
         </View>
 
-        <View style={styles.bottomBarShell}>
-          <View style={styles.bottomBar}>
+        <View style={[styles.bottomBarShell, { backgroundColor: dynamicShellColor }]}>
+          <View style={[styles.bottomBar, { backgroundColor: getShellOverlayColor(homeMasterSettings.theme.backgroundGrayLightness, homeMasterSettings.theme.backgroundGraySaturation, 0.9) }]}>
             <Pressable
               accessibilityRole="button"
               onPress={() => router.push("/camera")}

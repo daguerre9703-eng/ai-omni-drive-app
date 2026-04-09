@@ -1,9 +1,11 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import MaterialIcons from "@expo/vector-icons/MaterialIcons";
 import { router } from "expo-router";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Alert,
+  LayoutChangeEvent,
+  PanResponder,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -14,6 +16,24 @@ import {
 } from "react-native";
 
 import { ScreenContainer } from "@/components/screen-container";
+import {
+  DEFAULT_HOME_MASTER_SETTINGS,
+  FONT_PRESET_OPTIONS,
+  HOME_MASTER_STORAGE_KEY,
+  HOME_MASTER_THEME_SLOT_LABEL,
+  LAYOUT_PRESET_OPTIONS,
+  clampValue,
+  getFontFamilyForPreset,
+  getFontWeightForPreset,
+  getGrayBackgroundColor,
+  getShellOverlayColor,
+  mergeHomeMasterSettings,
+  type ElementOffset,
+  type FontPreset,
+  type HomeMasterSettings,
+  type HudElementKey,
+  type LayoutPresetKey,
+} from "@/lib/home-master-settings";
 import {
   DEFAULT_VOICE_ALERT_SETTINGS,
   VOICE_LENGTH_OPTIONS,
@@ -36,6 +56,10 @@ type AppSettings = {
 };
 
 const SETTINGS_STORAGE_KEY = "ai-omni-drive:settings";
+const HOME_PREVIEW_WIDTH = 300;
+const HOME_PREVIEW_HEIGHT = 320;
+const POSITION_LIMIT_X = 46;
+const POSITION_LIMIT_Y = 38;
 
 const DEFAULT_SETTINGS: AppSettings = {
   voiceGuideEnabled: DEFAULT_VOICE_ALERT_SETTINGS.enabled,
@@ -95,6 +119,110 @@ const ARROW_SIZE_OPTIONS: Array<{
   },
 ];
 
+const ELEMENT_LABEL: Record<HudElementKey, string> = {
+  signal: "신호등 카드",
+  speed: "속도계",
+  direction: "화살표",
+};
+
+const PREVIEW_BASE_POSITION: Record<HudElementKey, ElementOffset> = {
+  signal: { x: 26, y: 20 },
+  speed: { x: 28, y: 164 },
+  direction: { x: 34, y: 244 },
+};
+
+function SliderControl({
+  title,
+  description,
+  min,
+  max,
+  step,
+  value,
+  displayValue,
+  onChange,
+  accentColor = "#111827",
+}: {
+  title: string;
+  description: string;
+  min: number;
+  max: number;
+  step: number;
+  value: number;
+  displayValue: string;
+  onChange: (value: number) => void;
+  accentColor?: string;
+}) {
+  const trackWidthRef = useRef(1);
+  const normalized = (value - min) / (max - min);
+
+  const updateFromLocation = useCallback(
+    (locationX: number) => {
+      const ratio = clampValue(locationX / Math.max(trackWidthRef.current, 1), 0, 1);
+      const rawValue = min + ratio * (max - min);
+      const steppedValue = Math.round(rawValue / step) * step;
+      onChange(Number(clampValue(steppedValue, min, max).toFixed(2)));
+    },
+    [max, min, onChange, step],
+  );
+
+  const handleTrackLayout = useCallback((event: LayoutChangeEvent) => {
+    trackWidthRef.current = event.nativeEvent.layout.width;
+  }, []);
+
+  return (
+    <View style={styles.sliderCard}>
+      <View style={styles.sliderHeaderRow}>
+        <View style={styles.sliderTextGroup}>
+          <Text style={styles.sliderTitle}>{title}</Text>
+          <Text style={styles.sliderDescription}>{description}</Text>
+        </View>
+        <View style={styles.sliderValueBadge}>
+          <Text style={styles.sliderValueBadgeText}>{displayValue}</Text>
+        </View>
+      </View>
+
+      <View style={styles.sliderControlRow}>
+        <Pressable
+          accessibilityRole="button"
+          onPress={() => onChange(Number(clampValue(value - step, min, max).toFixed(2)))}
+          style={({ pressed }) => [styles.sliderStepButton, pressed && styles.buttonPressed]}
+        >
+          <MaterialIcons name="remove" size={24} color="#11181c" />
+        </Pressable>
+
+        <View
+          onLayout={handleTrackLayout}
+          onStartShouldSetResponder={() => true}
+          onMoveShouldSetResponder={() => true}
+          onResponderGrant={(event) => updateFromLocation(event.nativeEvent.locationX)}
+          onResponderMove={(event) => updateFromLocation(event.nativeEvent.locationX)}
+          style={styles.sliderTrack}
+        >
+          <View style={styles.sliderTrackBase} />
+          <View style={[styles.sliderTrackFill, { width: `${Math.max(0, Math.min(100, normalized * 100))}%`, backgroundColor: accentColor }]} />
+          <View
+            style={[
+              styles.sliderThumb,
+              {
+                left: `${Math.max(0, Math.min(100, normalized * 100))}%`,
+                borderColor: accentColor,
+              },
+            ]}
+          />
+        </View>
+
+        <Pressable
+          accessibilityRole="button"
+          onPress={() => onChange(Number(clampValue(value + step, min, max).toFixed(2)))}
+          style={({ pressed }) => [styles.sliderStepButton, pressed && styles.buttonPressed]}
+        >
+          <MaterialIcons name="add" size={24} color="#11181c" />
+        </Pressable>
+      </View>
+    </View>
+  );
+}
+
 export default function SettingsScreen() {
   const [voiceGuideEnabled, setVoiceGuideEnabled] = useState(DEFAULT_SETTINGS.voiceGuideEnabled);
   const [voiceAlertLength, setVoiceAlertLength] = useState<VoiceAlertLength>(
@@ -110,35 +238,45 @@ export default function SettingsScreen() {
   const [arrowSize, setArrowSize] = useState<ArrowSize>(DEFAULT_SETTINGS.arrowSize);
   const [quickDestinations, setQuickDestinations] = useState<string[]>(DEFAULT_SETTINGS.quickDestinations);
   const [pendingDestination, setPendingDestination] = useState("");
+  const [homeMasterSettings, setHomeMasterSettings] = useState<HomeMasterSettings>(
+    DEFAULT_HOME_MASTER_SETTINGS,
+  );
+  const [selectedHudElement, setSelectedHudElement] = useState<HudElementKey>("signal");
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
+  const dragStartRef = useRef<Record<HudElementKey, ElementOffset>>({
+    signal: { ...DEFAULT_HOME_MASTER_SETTINGS.positions.signal },
+    speed: { ...DEFAULT_HOME_MASTER_SETTINGS.positions.speed },
+    direction: { ...DEFAULT_HOME_MASTER_SETTINGS.positions.direction },
+  });
 
   useEffect(() => {
     let isMounted = true;
 
     const loadSettings = async () => {
       try {
-        const savedValue = await AsyncStorage.getItem(SETTINGS_STORAGE_KEY);
+        const [savedValue, savedHomeMasterValue] = await Promise.all([
+          AsyncStorage.getItem(SETTINGS_STORAGE_KEY),
+          AsyncStorage.getItem(HOME_MASTER_STORAGE_KEY),
+        ]);
 
-        if (!savedValue) {
-          return;
+        if (savedValue && isMounted) {
+          const parsed = JSON.parse(savedValue) as Partial<AppSettings>;
+          setVoiceGuideEnabled(parsed.voiceGuideEnabled ?? DEFAULT_SETTINGS.voiceGuideEnabled);
+          setVoiceAlertLength(parsed.voiceAlertLength ?? DEFAULT_SETTINGS.voiceAlertLength);
+          setVoiceAlertStyle(parsed.voiceAlertStyle ?? DEFAULT_SETTINGS.voiceAlertStyle);
+          setLiveRouteSyncEnabled(parsed.liveRouteSyncEnabled ?? DEFAULT_SETTINGS.liveRouteSyncEnabled);
+          setSelectedNavigationProvider(
+            parsed.selectedNavigationProvider ?? DEFAULT_SETTINGS.selectedNavigationProvider,
+          );
+          setArrowSize(parsed.arrowSize ?? DEFAULT_SETTINGS.arrowSize);
+          setQuickDestinations(parsed.quickDestinations ?? DEFAULT_SETTINGS.quickDestinations);
         }
 
-        const parsed = JSON.parse(savedValue) as Partial<AppSettings>;
-
-        if (!isMounted) {
-          return;
+        if (savedHomeMasterValue && isMounted) {
+          const parsedHomeMaster = JSON.parse(savedHomeMasterValue) as Partial<HomeMasterSettings>;
+          setHomeMasterSettings(mergeHomeMasterSettings(parsedHomeMaster));
         }
-
-        setVoiceGuideEnabled(parsed.voiceGuideEnabled ?? DEFAULT_SETTINGS.voiceGuideEnabled);
-        setVoiceAlertLength(parsed.voiceAlertLength ?? DEFAULT_SETTINGS.voiceAlertLength);
-        setVoiceAlertStyle(parsed.voiceAlertStyle ?? DEFAULT_SETTINGS.voiceAlertStyle);
-        setLiveRouteSyncEnabled(parsed.liveRouteSyncEnabled ?? DEFAULT_SETTINGS.liveRouteSyncEnabled);
-        setSelectedNavigationProvider(
-          parsed.selectedNavigationProvider ?? DEFAULT_SETTINGS.selectedNavigationProvider,
-        );
-        setArrowSize(parsed.arrowSize ?? DEFAULT_SETTINGS.arrowSize);
-        setQuickDestinations(parsed.quickDestinations ?? DEFAULT_SETTINGS.quickDestinations);
       } catch (error) {
         console.error("Failed to load settings", error);
       } finally {
@@ -155,6 +293,56 @@ export default function SettingsScreen() {
     };
   }, []);
 
+  const patchHomeMasterSettings = useCallback((partial: Partial<HomeMasterSettings>) => {
+    setHomeMasterSettings((prev) =>
+      mergeHomeMasterSettings({
+        ...prev,
+        ...partial,
+        positions: {
+          ...prev.positions,
+          ...partial.positions,
+        },
+        sizes: {
+          ...prev.sizes,
+          ...partial.sizes,
+        },
+        theme: {
+          ...prev.theme,
+          ...partial.theme,
+        },
+        signalGlow: {
+          ...prev.signalGlow,
+          ...partial.signalGlow,
+        },
+      }),
+    );
+  }, []);
+
+  const updateElementPosition = useCallback(
+    (key: HudElementKey, nextPosition: ElementOffset) => {
+      patchHomeMasterSettings({
+        positions: {
+          [key]: {
+            x: clampValue(nextPosition.x, -POSITION_LIMIT_X, POSITION_LIMIT_X),
+            y: clampValue(nextPosition.y, -POSITION_LIMIT_Y, POSITION_LIMIT_Y),
+          },
+        } as Record<HudElementKey, ElementOffset>,
+      });
+    },
+    [patchHomeMasterSettings],
+  );
+
+  const updateSizeValue = useCallback(
+    (key: keyof HomeMasterSettings["sizes"], value: number) => {
+      patchHomeMasterSettings({
+        sizes: {
+          [key]: value,
+        } as HomeMasterSettings["sizes"],
+      });
+    },
+    [patchHomeMasterSettings],
+  );
+
   const currentProviderLabel = useMemo(() => {
     return PROVIDER_OPTIONS.find((option) => option.key === selectedNavigationProvider)?.title ?? "티맵";
   }, [selectedNavigationProvider]);
@@ -166,6 +354,72 @@ export default function SettingsScreen() {
   const selectedStyleLabel = useMemo(() => {
     return VOICE_STYLE_OPTIONS.find((option) => option.key === voiceAlertStyle)?.title ?? "기본";
   }, [voiceAlertStyle]);
+
+  const selectedFontLabel = useMemo(() => {
+    return FONT_PRESET_OPTIONS.find((option) => option.key === homeMasterSettings.fontPreset)?.title ?? "애플 Extra Bold";
+  }, [homeMasterSettings.fontPreset]);
+
+  const selectedLayoutLabel = useMemo(() => {
+    return LAYOUT_PRESET_OPTIONS.find((option) => option.key === homeMasterSettings.layoutPreset)?.title ?? "균형형";
+  }, [homeMasterSettings.layoutPreset]);
+
+  const previewBackgroundColor = useMemo(() => {
+    return getGrayBackgroundColor(
+      homeMasterSettings.theme.backgroundGrayLightness,
+      homeMasterSettings.theme.backgroundGraySaturation,
+    );
+  }, [homeMasterSettings.theme.backgroundGrayLightness, homeMasterSettings.theme.backgroundGraySaturation]);
+
+  const previewShellColor = useMemo(() => {
+    return getShellOverlayColor(
+      homeMasterSettings.theme.backgroundGrayLightness,
+      homeMasterSettings.theme.backgroundGraySaturation,
+      homeMasterSettings.theme.hudShellOpacity,
+    );
+  }, [
+    homeMasterSettings.theme.backgroundGrayLightness,
+    homeMasterSettings.theme.backgroundGraySaturation,
+    homeMasterSettings.theme.hudShellOpacity,
+  ]);
+
+  const sharedFontFamily = getFontFamilyForPreset(homeMasterSettings.fontPreset as FontPreset);
+  const sharedFontWeight = getFontWeightForPreset(homeMasterSettings.fontPreset as FontPreset);
+
+  const previewPositionStyle = useCallback(
+    (key: HudElementKey) => {
+      const base = PREVIEW_BASE_POSITION[key];
+      const offset = homeMasterSettings.positions[key];
+      return {
+        left: base.x + offset.x,
+        top: base.y + offset.y + homeMasterSettings.verticalBalance,
+      };
+    },
+    [homeMasterSettings.positions, homeMasterSettings.verticalBalance],
+  );
+
+  const createDragResponder = useCallback(
+    (key: HudElementKey) =>
+      PanResponder.create({
+        onStartShouldSetPanResponder: () => true,
+        onMoveShouldSetPanResponder: () => true,
+        onPanResponderGrant: () => {
+          setSelectedHudElement(key);
+          dragStartRef.current[key] = { ...homeMasterSettings.positions[key] };
+        },
+        onPanResponderMove: (_, gestureState) => {
+          const dragStart = dragStartRef.current[key];
+          updateElementPosition(key, {
+            x: dragStart.x + gestureState.dx / 2.8,
+            y: dragStart.y + gestureState.dy / 2.8,
+          });
+        },
+      }),
+    [homeMasterSettings.positions, updateElementPosition],
+  );
+
+  const signalPanResponder = createDragResponder("signal");
+  const speedPanResponder = createDragResponder("speed");
+  const directionPanResponder = createDragResponder("direction");
 
   const handleAddDestination = () => {
     const trimmed = pendingDestination.trim();
@@ -189,6 +443,62 @@ export default function SettingsScreen() {
     setQuickDestinations((prev) => prev.filter((item) => item !== target));
   };
 
+  const handleApplyLayoutPreset = (presetKey: LayoutPresetKey) => {
+    const preset = LAYOUT_PRESET_OPTIONS.find((option) => option.key === presetKey);
+
+    if (!preset) {
+      return;
+    }
+
+    patchHomeMasterSettings({
+      layoutPreset: preset.key,
+      verticalBalance: preset.verticalBalance,
+      positions: {
+        signal: { ...preset.positions.signal },
+        speed: { ...preset.positions.speed },
+        direction: { ...preset.positions.direction },
+      },
+    });
+  };
+
+  const handleMoveSelectedElement = (axis: "x" | "y", delta: number) => {
+    const currentPosition = homeMasterSettings.positions[selectedHudElement];
+    updateElementPosition(selectedHudElement, {
+      ...currentPosition,
+      [axis]: currentPosition[axis] + delta,
+    });
+  };
+
+  const handleSaveHomeTheme = async () => {
+    const nextSettings = mergeHomeMasterSettings({
+      ...homeMasterSettings,
+      savedThemeLabel: HOME_MASTER_THEME_SLOT_LABEL["my-theme-1"],
+    });
+
+    try {
+      await AsyncStorage.setItem(HOME_MASTER_STORAGE_KEY, JSON.stringify(nextSettings));
+      setHomeMasterSettings(nextSettings);
+      Alert.alert("저장 완료", "홈 화면 전문 설정을 나만의 테마 1로 저장했습니다.");
+    } catch (error) {
+      console.error("Failed to save home master settings", error);
+      Alert.alert("저장 실패", "홈 화면 전문 설정을 저장하지 못했습니다.");
+    }
+  };
+
+  const handleResetHomeTheme = async () => {
+    const nextSettings = mergeHomeMasterSettings(DEFAULT_HOME_MASTER_SETTINGS);
+
+    try {
+      await AsyncStorage.setItem(HOME_MASTER_STORAGE_KEY, JSON.stringify(nextSettings));
+      setHomeMasterSettings(nextSettings);
+      setSelectedHudElement("signal");
+      Alert.alert("원상복구 완료", "홈 화면 전문 설정을 기본 균형형 테마로 되돌렸습니다.");
+    } catch (error) {
+      console.error("Failed to reset home master settings", error);
+      Alert.alert("원상복구 실패", "기본 테마로 되돌리지 못했습니다.");
+    }
+  };
+
   const handleSave = async () => {
     const nextSettings: AppSettings = {
       voiceGuideEnabled,
@@ -200,9 +510,16 @@ export default function SettingsScreen() {
       quickDestinations,
     };
 
+    const nextHomeMasterSettings = mergeHomeMasterSettings({
+      ...homeMasterSettings,
+      savedThemeLabel: HOME_MASTER_THEME_SLOT_LABEL["my-theme-1"],
+    });
+
     try {
       setIsSaving(true);
       await AsyncStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(nextSettings));
+      await AsyncStorage.setItem(HOME_MASTER_STORAGE_KEY, JSON.stringify(nextHomeMasterSettings));
+      setHomeMasterSettings(nextHomeMasterSettings);
       Alert.alert(
         "저장 완료",
         `${currentProviderLabel} 연동 설정과 ${selectedLengthLabel} · ${selectedStyleLabel} 음성 스타일을 저장했습니다.`,
@@ -431,6 +748,460 @@ export default function SettingsScreen() {
             </View>
           </View>
 
+          <View style={styles.masterCenterCard}>
+            <View style={styles.masterCenterHeader}>
+              <Text style={styles.masterCenterEyebrow}>홈 화면 전문 설정 센터</Text>
+              <Text style={styles.masterCenterTitle}>운전 HUD 레이아웃 마스터</Text>
+              <Text style={styles.masterCenterDescription}>
+                홈 화면의 신호 카드, 속도계, 방향 화살표를 직접 움직이고 크기·폰트·그레이 톤·Glow 강도를 조절해 나만의 주행 시야를 만들 수 있습니다.
+              </Text>
+            </View>
+
+            <View style={styles.masterSummaryRow}>
+              <View style={styles.masterSummaryPill}>
+                <Text style={styles.masterSummaryLabel}>프리셋</Text>
+                <Text style={styles.masterSummaryValue}>{selectedLayoutLabel}</Text>
+              </View>
+              <View style={styles.masterSummaryPill}>
+                <Text style={styles.masterSummaryLabel}>폰트</Text>
+                <Text style={styles.masterSummaryValue}>{selectedFontLabel}</Text>
+              </View>
+              <View style={styles.masterSummaryPill}>
+                <Text style={styles.masterSummaryLabel}>저장 슬롯</Text>
+                <Text style={styles.masterSummaryValue}>{homeMasterSettings.savedThemeLabel}</Text>
+              </View>
+            </View>
+
+            <View style={styles.masterPreviewWrap}>
+              <View
+                style={[
+                  styles.homePreviewBoard,
+                  {
+                    width: HOME_PREVIEW_WIDTH,
+                    height: HOME_PREVIEW_HEIGHT,
+                    backgroundColor: previewBackgroundColor,
+                  },
+                ]}
+              >
+                <Text style={styles.homePreviewCaption}>드래그해서 위치 조절</Text>
+
+                <View
+                  {...signalPanResponder.panHandlers}
+                  style={[
+                    styles.previewSignalBlock,
+                    previewPositionStyle("signal"),
+                    selectedHudElement === "signal" && styles.previewBlockSelected,
+                    {
+                      width: 246,
+                      shadowColor: `rgba(196,18,48,${0.28 * homeMasterSettings.signalGlow.red})`,
+                    },
+                  ]}
+                >
+                  <View style={[styles.previewCardShell, { backgroundColor: previewShellColor }]}>
+                    <View style={styles.previewSignalInner}>
+                      <Text
+                        style={[
+                          styles.previewSignalTitle,
+                          {
+                            fontSize: homeMasterSettings.sizes.signalTitle,
+                            lineHeight: homeMasterSettings.sizes.signalTitle + 4,
+                            fontFamily: sharedFontFamily,
+                            fontWeight: sharedFontWeight,
+                          },
+                        ]}
+                      >
+                        STOP
+                      </Text>
+                      <Text
+                        style={[
+                          styles.previewSignalDistance,
+                          {
+                            fontSize: homeMasterSettings.sizes.distanceValue,
+                            lineHeight: homeMasterSettings.sizes.distanceValue + 4,
+                            fontFamily: sharedFontFamily,
+                            fontWeight: sharedFontWeight,
+                          },
+                        ]}
+                      >
+                        128m
+                      </Text>
+                    </View>
+                  </View>
+                </View>
+
+                <View
+                  {...speedPanResponder.panHandlers}
+                  style={[
+                    styles.previewSpeedBlock,
+                    previewPositionStyle("speed"),
+                    selectedHudElement === "speed" && styles.previewBlockSelected,
+                    { width: 242 },
+                  ]}
+                >
+                  <View style={[styles.previewCardShell, { backgroundColor: previewShellColor }]}>
+                    <View style={styles.previewSpeedInner}>
+                      <Text style={[styles.previewSpeedLabel, { fontFamily: sharedFontFamily, fontWeight: sharedFontWeight }]}>현재 속도</Text>
+                      <Text
+                        style={[
+                          styles.previewSpeedValue,
+                          {
+                            fontSize: homeMasterSettings.sizes.speedValue,
+                            lineHeight: homeMasterSettings.sizes.speedValue + 4,
+                            fontFamily: sharedFontFamily,
+                            fontWeight: sharedFontWeight,
+                          },
+                        ]}
+                      >
+                        18
+                      </Text>
+                    </View>
+                  </View>
+                </View>
+
+                <View
+                  {...directionPanResponder.panHandlers}
+                  style={[
+                    styles.previewDirectionBlock,
+                    previewPositionStyle("direction"),
+                    selectedHudElement === "direction" && styles.previewBlockSelected,
+                    { width: 234 },
+                  ]}
+                >
+                  <View style={[styles.previewCardShell, { backgroundColor: previewShellColor }]}>
+                    <View style={styles.previewDirectionInner}>
+                      <Text
+                        style={[
+                          styles.previewDirectionArrow,
+                          {
+                            fontSize: Math.round(118 * homeMasterSettings.sizes.directionArrow),
+                            lineHeight: Math.round(118 * homeMasterSettings.sizes.directionArrow) + 2,
+                            fontFamily: sharedFontFamily,
+                            fontWeight: "900",
+                            textShadowColor: `rgba(255,255,255,${0.24 * homeMasterSettings.signalGlow.green})`,
+                          },
+                        ]}
+                      >
+                        ↑
+                      </Text>
+                      <Text
+                        style={[
+                          styles.previewDirectionLabel,
+                          {
+                            fontSize: homeMasterSettings.sizes.directionLabel,
+                            lineHeight: homeMasterSettings.sizes.directionLabel + 2,
+                            fontFamily: sharedFontFamily,
+                            fontWeight: sharedFontWeight,
+                          },
+                        ]}
+                      >
+                        직진
+                      </Text>
+                    </View>
+                  </View>
+                </View>
+              </View>
+            </View>
+
+            <View style={styles.masterSectionCard}>
+              <Text style={styles.masterSectionTitle}>1. 위치 및 레이아웃 프리셋</Text>
+              <Text style={styles.sectionDescription}>
+                프리셋을 고른 뒤 미리보기 HUD 요소를 직접 드래그하거나 미세 이동 버튼으로 위치를 잡을 수 있습니다.
+              </Text>
+
+              <View style={styles.optionList}>
+                {LAYOUT_PRESET_OPTIONS.map((option) => {
+                  const selected = option.key === homeMasterSettings.layoutPreset;
+
+                  return (
+                    <Pressable
+                      key={option.key}
+                      accessibilityRole="button"
+                      onPress={() => handleApplyLayoutPreset(option.key)}
+                      style={({ pressed }) => [
+                        styles.arrowOption,
+                        selected && styles.arrowOptionSelected,
+                        pressed && styles.buttonPressed,
+                      ]}
+                    >
+                      <Text style={[styles.arrowOptionTitle, selected && styles.arrowOptionTitleSelected]}>
+                        {option.title}
+                      </Text>
+                      <Text
+                        style={[
+                          styles.arrowOptionDescription,
+                          selected && styles.arrowOptionDescriptionSelected,
+                        ]}
+                      >
+                        {option.description}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+
+              <SliderControl
+                title="상하 여백 밸런스"
+                description="전체 HUD를 위·아래로 움직이며 황금 비율을 맞춥니다."
+                min={-24}
+                max={24}
+                step={2}
+                value={homeMasterSettings.verticalBalance}
+                displayValue={`${homeMasterSettings.verticalBalance > 0 ? "+" : ""}${homeMasterSettings.verticalBalance}`}
+                onChange={(nextValue) => patchHomeMasterSettings({ verticalBalance: nextValue })}
+              />
+
+              <View style={styles.selectionWrap}>
+                <Text style={styles.selectionLabel}>선택한 요소</Text>
+                <View style={styles.elementChipRow}>
+                  {(["signal", "speed", "direction"] as HudElementKey[]).map((elementKey) => {
+                    const selected = elementKey === selectedHudElement;
+
+                    return (
+                      <Pressable
+                        key={elementKey}
+                        accessibilityRole="button"
+                        onPress={() => setSelectedHudElement(elementKey)}
+                        style={({ pressed }) => [
+                          styles.elementChip,
+                          selected && styles.elementChipSelected,
+                          pressed && styles.buttonPressed,
+                        ]}
+                      >
+                        <Text style={[styles.elementChipText, selected && styles.elementChipTextSelected]}>
+                          {ELEMENT_LABEL[elementKey]}
+                        </Text>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+              </View>
+
+              <View style={styles.nudgeGrid}>
+                <View style={styles.nudgeSpacer} />
+                <Pressable
+                  accessibilityRole="button"
+                  onPress={() => handleMoveSelectedElement("y", -4)}
+                  style={({ pressed }) => [styles.nudgeButton, pressed && styles.buttonPressed]}
+                >
+                  <MaterialIcons name="keyboard-arrow-up" size={28} color="#11181c" />
+                </Pressable>
+                <View style={styles.nudgeSpacer} />
+                <Pressable
+                  accessibilityRole="button"
+                  onPress={() => handleMoveSelectedElement("x", -4)}
+                  style={({ pressed }) => [styles.nudgeButton, pressed && styles.buttonPressed]}
+                >
+                  <MaterialIcons name="keyboard-arrow-left" size={28} color="#11181c" />
+                </Pressable>
+                <View style={styles.nudgeCenter}>
+                  <Text style={styles.nudgeCenterText}>{ELEMENT_LABEL[selectedHudElement]}</Text>
+                </View>
+                <Pressable
+                  accessibilityRole="button"
+                  onPress={() => handleMoveSelectedElement("x", 4)}
+                  style={({ pressed }) => [styles.nudgeButton, pressed && styles.buttonPressed]}
+                >
+                  <MaterialIcons name="keyboard-arrow-right" size={28} color="#11181c" />
+                </Pressable>
+                <View style={styles.nudgeSpacer} />
+                <Pressable
+                  accessibilityRole="button"
+                  onPress={() => handleMoveSelectedElement("y", 4)}
+                  style={({ pressed }) => [styles.nudgeButton, pressed && styles.buttonPressed]}
+                >
+                  <MaterialIcons name="keyboard-arrow-down" size={28} color="#11181c" />
+                </Pressable>
+                <View style={styles.nudgeSpacer} />
+              </View>
+            </View>
+
+            <View style={styles.masterSectionCard}>
+              <Text style={styles.masterSectionTitle}>2. 크기 및 폰트 마스터</Text>
+              <Text style={styles.sectionDescription}>
+                속도계 숫자, 남은 거리, 화살표 크기를 독립적으로 조절하고 주행용 굵은 서체를 선택할 수 있습니다.
+              </Text>
+
+              <SliderControl
+                title="속도계 숫자"
+                description="중앙 속도계 숫자 크기"
+                min={30}
+                max={58}
+                step={2}
+                value={homeMasterSettings.sizes.speedValue}
+                displayValue={`${homeMasterSettings.sizes.speedValue}pt`}
+                onChange={(nextValue) => updateSizeValue("speedValue", nextValue)}
+              />
+
+              <SliderControl
+                title="남은 거리 숫자"
+                description="상단 신호 카드 거리 숫자 크기"
+                min={72}
+                max={112}
+                step={2}
+                value={homeMasterSettings.sizes.distanceValue}
+                displayValue={`${homeMasterSettings.sizes.distanceValue}pt`}
+                onChange={(nextValue) => updateSizeValue("distanceValue", nextValue)}
+                accentColor="#C41230"
+              />
+
+              <SliderControl
+                title="방향 화살표"
+                description="하단 화살표의 크기 배율"
+                min={0.9}
+                max={1.8}
+                step={0.05}
+                value={homeMasterSettings.sizes.directionArrow}
+                displayValue={`${homeMasterSettings.sizes.directionArrow.toFixed(2)}x`}
+                onChange={(nextValue) => updateSizeValue("directionArrow", nextValue)}
+                accentColor="#8E96A3"
+              />
+
+              <View style={styles.selectionWrap}>
+                <Text style={styles.selectionLabel}>폰트 셀렉터</Text>
+                <View style={styles.optionList}>
+                  {FONT_PRESET_OPTIONS.map((option) => {
+                    const selected = option.key === homeMasterSettings.fontPreset;
+
+                    return (
+                      <Pressable
+                        key={option.key}
+                        accessibilityRole="button"
+                        onPress={() => patchHomeMasterSettings({ fontPreset: option.key as FontPreset })}
+                        style={({ pressed }) => [
+                          styles.arrowOption,
+                          selected && styles.arrowOptionSelected,
+                          pressed && styles.buttonPressed,
+                        ]}
+                      >
+                        <Text style={[styles.arrowOptionTitle, selected && styles.arrowOptionTitleSelected]}>
+                          {option.title}
+                        </Text>
+                        <Text
+                          style={[
+                            styles.arrowOptionDescription,
+                            selected && styles.arrowOptionDescriptionSelected,
+                          ]}
+                        >
+                          {option.description}
+                        </Text>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+              </View>
+            </View>
+
+            <View style={styles.masterSectionCard}>
+              <Text style={styles.masterSectionTitle}>3. 컬러 & 테마 믹서</Text>
+              <Text style={styles.sectionDescription}>
+                배경 그레이 명도·채도와 빨간불·초록불 Glow 강도를 조절해 HUD 대비를 맞춥니다.
+              </Text>
+
+              <SliderControl
+                title="배경 그레이 명도"
+                description="전체 배경 밝기"
+                min={50}
+                max={86}
+                step={2}
+                value={homeMasterSettings.theme.backgroundGrayLightness}
+                displayValue={`${homeMasterSettings.theme.backgroundGrayLightness}%`}
+                onChange={(nextValue) =>
+                  patchHomeMasterSettings({
+                    theme: {
+                      ...homeMasterSettings.theme,
+                      backgroundGrayLightness: nextValue,
+                    },
+                  })
+                }
+                accentColor="#7B8794"
+              />
+
+              <SliderControl
+                title="배경 그레이 채도"
+                description="메탈릭 톤의 차가운 회색 강도"
+                min={0}
+                max={20}
+                step={1}
+                value={homeMasterSettings.theme.backgroundGraySaturation}
+                displayValue={`${homeMasterSettings.theme.backgroundGraySaturation}%`}
+                onChange={(nextValue) =>
+                  patchHomeMasterSettings({
+                    theme: {
+                      ...homeMasterSettings.theme,
+                      backgroundGraySaturation: nextValue,
+                    },
+                  })
+                }
+                accentColor="#98A2B3"
+              />
+
+              <SliderControl
+                title="빨간불 Glow 강도"
+                description="정지 경고 빛 번짐 강도"
+                min={0.4}
+                max={2.2}
+                step={0.1}
+                value={homeMasterSettings.signalGlow.red}
+                displayValue={`${homeMasterSettings.signalGlow.red.toFixed(1)}x`}
+                onChange={(nextValue) =>
+                  patchHomeMasterSettings({
+                    signalGlow: {
+                      ...homeMasterSettings.signalGlow,
+                      red: nextValue,
+                    },
+                  })
+                }
+                accentColor="#C41230"
+              />
+
+              <SliderControl
+                title="초록불 Glow 강도"
+                description="진행 상태 빛 번짐 강도"
+                min={0.4}
+                max={2.2}
+                step={0.1}
+                value={homeMasterSettings.signalGlow.green}
+                displayValue={`${homeMasterSettings.signalGlow.green.toFixed(1)}x`}
+                onChange={(nextValue) =>
+                  patchHomeMasterSettings({
+                    signalGlow: {
+                      ...homeMasterSettings.signalGlow,
+                      green: nextValue,
+                    },
+                  })
+                }
+                accentColor="#42D64B"
+              />
+            </View>
+
+            <View style={styles.masterSectionCard}>
+              <Text style={styles.masterSectionTitle}>4. 저장 및 원상복구</Text>
+              <Text style={styles.sectionDescription}>
+                현재 배치를 나만의 테마 1로 저장하거나 기본 균형형 HUD로 즉시 되돌릴 수 있습니다.
+              </Text>
+
+              <View style={styles.masterActionRow}>
+                <Pressable
+                  accessibilityRole="button"
+                  onPress={handleSaveHomeTheme}
+                  style={({ pressed }) => [styles.goldActionButton, pressed && styles.buttonPressed]}
+                >
+                  <MaterialIcons name="workspace-premium" size={24} color="#3F2A00" />
+                  <Text style={styles.goldActionButtonText}>나만의 테마 1 저장</Text>
+                </Pressable>
+
+                <Pressable
+                  accessibilityRole="button"
+                  onPress={handleResetHomeTheme}
+                  style={({ pressed }) => [styles.goldOutlineButton, pressed && styles.buttonPressed]}
+                >
+                  <MaterialIcons name="restart-alt" size={24} color="#7A5300" />
+                  <Text style={styles.goldOutlineButtonText}>원상복구</Text>
+                </Pressable>
+              </View>
+            </View>
+          </View>
+
           <View style={styles.sectionCard}>
             <Text style={styles.sectionTitle}>빠른 목적지</Text>
             <Text style={styles.sectionDescription}>
@@ -499,6 +1270,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 18,
     paddingTop: 12,
     paddingBottom: 18,
+    backgroundColor: "#eef2f7",
   },
   root: {
     flex: 1,
@@ -727,5 +1499,357 @@ const styles = StyleSheet.create({
     fontSize: 24,
     fontWeight: "bold",
     color: "#ffffff",
+  },
+  masterCenterCard: {
+    borderRadius: 30,
+    paddingHorizontal: 18,
+    paddingVertical: 20,
+    gap: 16,
+    backgroundColor: "#111827",
+    borderWidth: 1,
+    borderColor: "#202938",
+  },
+  masterCenterHeader: {
+    gap: 8,
+  },
+  masterCenterEyebrow: {
+    fontSize: 16,
+    fontWeight: "900",
+    color: "#d4af37",
+    letterSpacing: 0.4,
+  },
+  masterCenterTitle: {
+    fontSize: 30,
+    fontWeight: "900",
+    color: "#ffffff",
+  },
+  masterCenterDescription: {
+    fontSize: 19,
+    lineHeight: 27,
+    fontWeight: "600",
+    color: "#d1d5db",
+  },
+  masterSummaryRow: {
+    gap: 10,
+  },
+  masterSummaryPill: {
+    borderRadius: 18,
+    backgroundColor: "#1d2635",
+    borderWidth: 1,
+    borderColor: "#2c3749",
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    gap: 4,
+  },
+  masterSummaryLabel: {
+    fontSize: 15,
+    fontWeight: "800",
+    color: "#98a2b3",
+  },
+  masterSummaryValue: {
+    fontSize: 22,
+    fontWeight: "900",
+    color: "#ffffff",
+  },
+  masterPreviewWrap: {
+    alignItems: "center",
+  },
+  homePreviewBoard: {
+    borderRadius: 28,
+    borderWidth: 1.4,
+    borderColor: "rgba(255,255,255,0.8)",
+    overflow: "hidden",
+    position: "relative",
+  },
+  homePreviewCaption: {
+    position: "absolute",
+    top: 10,
+    right: 12,
+    zIndex: 10,
+    fontSize: 14,
+    fontWeight: "900",
+    color: "#4b5563",
+  },
+  previewCardShell: {
+    borderRadius: 20,
+    padding: 2,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.65)",
+  },
+  previewBlockSelected: {
+    borderRadius: 22,
+    borderWidth: 2,
+    borderStyle: "dashed",
+    borderColor: "#d4af37",
+  },
+  previewSignalBlock: {
+    position: "absolute",
+  },
+  previewSignalInner: {
+    minHeight: 124,
+    borderRadius: 18,
+    backgroundColor: "#C41230",
+    alignItems: "center",
+    justifyContent: "flex-start",
+    paddingTop: 16,
+    paddingBottom: 14,
+  },
+  previewSignalTitle: {
+    color: "#FDFDFD",
+    textAlign: "center",
+  },
+  previewSignalDistance: {
+    marginTop: 20,
+    color: "#111111",
+    textAlign: "center",
+    letterSpacing: -1.4,
+  },
+  previewSpeedBlock: {
+    position: "absolute",
+  },
+  previewSpeedInner: {
+    minHeight: 64,
+    borderRadius: 18,
+    backgroundColor: "#D7DCE3",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 10,
+  },
+  previewSpeedLabel: {
+    fontSize: 14,
+    lineHeight: 17,
+    color: "#6B7280",
+    textAlign: "center",
+  },
+  previewSpeedValue: {
+    marginTop: 4,
+    color: "#1F2937",
+    textAlign: "center",
+  },
+  previewDirectionBlock: {
+    position: "absolute",
+  },
+  previewDirectionInner: {
+    minHeight: 70,
+    borderRadius: 18,
+    backgroundColor: "#D7DCE3",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingTop: 0,
+    paddingBottom: 4,
+  },
+  previewDirectionArrow: {
+    color: "#DCE2EA",
+    textAlign: "center",
+    marginBottom: -14,
+    transform: [{ scaleX: 1.2 }, { scaleY: 1.08 }],
+  },
+  previewDirectionLabel: {
+    color: "#27303B",
+    textAlign: "center",
+  },
+  masterSectionCard: {
+    borderRadius: 24,
+    paddingHorizontal: 16,
+    paddingVertical: 16,
+    backgroundColor: "#f8fafc",
+    gap: 12,
+  },
+  masterSectionTitle: {
+    fontSize: 24,
+    fontWeight: "900",
+    color: "#11181c",
+  },
+  sliderCard: {
+    borderRadius: 22,
+    backgroundColor: "#ffffff",
+    borderWidth: 1,
+    borderColor: "#d8dee7",
+    paddingHorizontal: 14,
+    paddingVertical: 14,
+    gap: 12,
+  },
+  sliderHeaderRow: {
+    flexDirection: "row",
+    gap: 10,
+    alignItems: "flex-start",
+  },
+  sliderTextGroup: {
+    flex: 1,
+    gap: 4,
+  },
+  sliderTitle: {
+    fontSize: 22,
+    fontWeight: "900",
+    color: "#11181c",
+  },
+  sliderDescription: {
+    fontSize: 17,
+    lineHeight: 24,
+    fontWeight: "600",
+    color: "#6b7280",
+  },
+  sliderValueBadge: {
+    minWidth: 84,
+    borderRadius: 14,
+    backgroundColor: "#eef2f7",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 10,
+    paddingVertical: 10,
+  },
+  sliderValueBadgeText: {
+    fontSize: 18,
+    fontWeight: "900",
+    color: "#11181c",
+  },
+  sliderControlRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+  sliderStepButton: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#eef2f7",
+    borderWidth: 1,
+    borderColor: "#d1d5db",
+  },
+  sliderTrack: {
+    flex: 1,
+    height: 38,
+    justifyContent: "center",
+  },
+  sliderTrackBase: {
+    height: 8,
+    borderRadius: 999,
+    backgroundColor: "#d7dde6",
+  },
+  sliderTrackFill: {
+    position: "absolute",
+    left: 0,
+    height: 8,
+    borderRadius: 999,
+  },
+  sliderThumb: {
+    position: "absolute",
+    top: 4,
+    width: 24,
+    height: 24,
+    marginLeft: -12,
+    borderRadius: 12,
+    backgroundColor: "#ffffff",
+    borderWidth: 3,
+  },
+  selectionWrap: {
+    gap: 10,
+  },
+  selectionLabel: {
+    fontSize: 20,
+    fontWeight: "900",
+    color: "#11181c",
+  },
+  elementChipRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+  },
+  elementChip: {
+    borderRadius: 999,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    backgroundColor: "#ffffff",
+    borderWidth: 1,
+    borderColor: "#d1d5db",
+  },
+  elementChipSelected: {
+    backgroundColor: "#111827",
+    borderColor: "#111827",
+  },
+  elementChipText: {
+    fontSize: 18,
+    fontWeight: "800",
+    color: "#11181c",
+  },
+  elementChipTextSelected: {
+    color: "#ffffff",
+  },
+  nudgeGrid: {
+    alignSelf: "center",
+    width: 216,
+    flexDirection: "row",
+    flexWrap: "wrap",
+    justifyContent: "center",
+    gap: 10,
+  },
+  nudgeButton: {
+    width: 58,
+    height: 58,
+    borderRadius: 18,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#ffffff",
+    borderWidth: 1,
+    borderColor: "#d1d5db",
+  },
+  nudgeCenter: {
+    width: 58,
+    height: 58,
+    borderRadius: 18,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#111827",
+    paddingHorizontal: 6,
+  },
+  nudgeCenterText: {
+    fontSize: 12,
+    lineHeight: 16,
+    fontWeight: "900",
+    color: "#ffffff",
+    textAlign: "center",
+  },
+  nudgeSpacer: {
+    width: 58,
+    height: 58,
+  },
+  masterActionRow: {
+    gap: 10,
+  },
+  goldActionButton: {
+    minHeight: 58,
+    borderRadius: 20,
+    backgroundColor: "#D4AF37",
+    borderWidth: 1,
+    borderColor: "#F8DE84",
+    alignItems: "center",
+    justifyContent: "center",
+    flexDirection: "row",
+    gap: 8,
+    paddingHorizontal: 16,
+  },
+  goldActionButtonText: {
+    fontSize: 21,
+    fontWeight: "900",
+    color: "#3F2A00",
+  },
+  goldOutlineButton: {
+    minHeight: 58,
+    borderRadius: 20,
+    backgroundColor: "#F6E4A3",
+    borderWidth: 1,
+    borderColor: "#E0BD54",
+    alignItems: "center",
+    justifyContent: "center",
+    flexDirection: "row",
+    gap: 8,
+    paddingHorizontal: 16,
+  },
+  goldOutlineButtonText: {
+    fontSize: 21,
+    fontWeight: "900",
+    color: "#7A5300",
   },
 });
