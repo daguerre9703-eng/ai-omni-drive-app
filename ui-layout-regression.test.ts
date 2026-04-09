@@ -22,7 +22,7 @@ describe("home hud layout regression", () => {
     expect(homeSource).toContain('title: "STOP"');
     expect(homeSource).toContain('cardBackground: "#7EF36B"');
     expect(homeSource).toContain('cardBackground: "#FFE37A"');
-    expect(homeSource).toContain('cardBackground: "#FF8F8A"');
+    expect(homeSource).toContain('cardBackground: "#C41230"');
     expect(homeSource).toContain('justifyContent: "flex-start"');
     expect(homeSource).toContain('paddingTop: 24');
     expect(homeSource).toContain('marginTop: 74');
@@ -49,7 +49,7 @@ describe("home hud layout regression", () => {
     expect(homeSource).toContain('symbol: "↑"');
     expect(homeSource).toContain('label: "직진"');
     expect(homeSource).toContain('huge: 122');
-    expect(homeSource).toContain('fontSize: 32');
+    expect(homeSource).toContain('fontSize: 40');
   });
 
   it("preserves gps linked updates and compact bottom controls", () => {
@@ -61,5 +61,14 @@ describe("home hud layout regression", () => {
     expect(homeSource).toContain('홈');
     expect(homeSource).toContain('설정');
     expect(tabSource).toContain('display: "none"');
+  });
+
+  it("strengthens the ruby red full-screen warning blink for stop state", () => {
+    expect(homeSource).toContain('const [redAlertVisible, setRedAlertVisible] = useState(false);');
+    expect(homeSource).toContain('backgroundColor: "#C41230"');
+    expect(homeSource).toContain('setRedAlertVisible((prev) => !prev);');
+    expect(homeSource).toContain('}, 260);');
+    expect(homeSource).toContain('opacity: 0.54');
+    expect(homeSource).toContain('opacity: 0.08');
   });
 });

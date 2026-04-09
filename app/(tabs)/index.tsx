@@ -109,8 +109,8 @@ const SIGNAL_META: Record<
   red: {
     title: "STOP",
     label: "정지",
-    cardBackground: "#FF8F8A",
-    glow: "rgba(255, 107, 107, 0.24)",
+    cardBackground: "#C41230",
+    glow: "rgba(196, 18, 48, 0.38)",
   },
   yellow: {
     title: "SLOW",
@@ -168,6 +168,7 @@ export default function HomeScreen() {
   const [liveRouteSyncEnabled, setLiveRouteSyncEnabled] = useState(DEFAULT_SETTINGS.liveRouteSyncEnabled);
   const [distanceValue, setDistanceValue] = useState(GPS_ROUTE_POINTS[0].signalDistanceLabel);
   const [speedValue, setSpeedValue] = useState(GPS_ROUTE_POINTS[0].fallbackSpeedLabel);
+  const [redAlertVisible, setRedAlertVisible] = useState(false);
   const routeIndexRef = useRef(0);
   const locationSubscriptionRef = useRef<Location.LocationSubscription | null>(null);
 
@@ -220,6 +221,22 @@ export default function HomeScreen() {
   }, [liveRouteSyncEnabled]);
 
   useEffect(() => {
+    const isRedSignal = SIGNAL_SEQUENCE[signalIndex] === "red";
+
+    if (!isRedSignal) {
+      setRedAlertVisible(false);
+      return;
+    }
+
+    setRedAlertVisible(true);
+    const interval = setInterval(() => {
+      setRedAlertVisible((prev) => !prev);
+    }, 260);
+
+    return () => clearInterval(interval);
+  }, [signalIndex]);
+
+  useEffect(() => {
     const startGpsSync = async () => {
       if (!liveRouteSyncEnabled) {
         return;
@@ -268,7 +285,9 @@ export default function HomeScreen() {
     };
   }, [liveRouteSyncEnabled]);
 
-  const currentSignal = useMemo(() => SIGNAL_META[SIGNAL_SEQUENCE[signalIndex]], [signalIndex]);
+  const currentSignalState = SIGNAL_SEQUENCE[signalIndex];
+  const currentSignal = useMemo(() => SIGNAL_META[currentSignalState], [currentSignalState]);
+  const isRedSignal = currentSignalState === "red";
   const voicePreviewText = useMemo(() => {
     if (!voiceGuideEnabled) {
       return "음성 안내 꺼짐";
@@ -297,6 +316,15 @@ export default function HomeScreen() {
   return (
     <ScreenContainer style={styles.screenContent}>
       <View style={styles.root}>
+        {isRedSignal ? (
+          <View
+            pointerEvents="none"
+            style={[
+              styles.redAlertOverlay,
+              redAlertVisible ? styles.redAlertOverlayVisible : styles.redAlertOverlayHidden,
+            ]}
+          />
+        ) : null}
         <View style={styles.topBar}>
           <View style={styles.providerPill}>
             <Text style={styles.providerText}>{PROVIDER_LABEL[selectedNavigationProvider]}</Text>
@@ -336,7 +364,12 @@ export default function HomeScreen() {
             style={({ pressed }) => [styles.cardShell, styles.directionShell, pressed && styles.pressedCardShell]}
           >
             <View style={styles.directionCard}>
-              <Text style={[styles.directionArrow, { fontSize: arrowFontSize, lineHeight: arrowFontSize + 6 }]}>
+              <Text
+                style={[
+                  styles.directionArrow,
+                  { fontSize: Math.round(arrowFontSize * 2.35), lineHeight: Math.round(arrowFontSize * 2.35) + 10 },
+                ]}
+              >
                 {currentDirection.symbol}
               </Text>
               <Text style={styles.directionLabel}>{currentDirection.label}</Text>
@@ -351,7 +384,7 @@ export default function HomeScreen() {
               onPress={() => router.push("/camera")}
               style={({ pressed }) => [styles.bottomButton, pressed && styles.bottomButtonPressed]}
             >
-              <MaterialIcons name="photo-camera" size={18} color="#1F2937" />
+              <MaterialIcons name="photo-camera" size={24} color="#1E2630" />
               <Text style={styles.bottomButtonText}>카메라</Text>
             </Pressable>
 
@@ -360,7 +393,7 @@ export default function HomeScreen() {
               onPress={() => router.push("/")}
               style={({ pressed }) => [styles.bottomButton, pressed && styles.bottomButtonPressed]}
             >
-              <MaterialIcons name="home" size={18} color="#1F2937" />
+              <MaterialIcons name="home" size={24} color="#1E2630" />
               <Text style={styles.bottomButtonText}>홈</Text>
             </Pressable>
 
@@ -369,7 +402,7 @@ export default function HomeScreen() {
               onPress={() => router.push("/settings")}
               style={({ pressed }) => [styles.bottomButton, pressed && styles.bottomButtonPressed]}
             >
-              <MaterialIcons name="settings" size={18} color="#1F2937" />
+              <MaterialIcons name="settings" size={24} color="#1E2630" />
               <Text style={styles.bottomButtonText}>설정</Text>
             </Pressable>
           </View>
@@ -383,6 +416,17 @@ const styles = StyleSheet.create({
   screenContent: {
     flex: 1,
     backgroundColor: "#B7BBC2",
+  },
+  redAlertOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "#C41230",
+    zIndex: 20,
+  },
+  redAlertOverlayVisible: {
+    opacity: 0.54,
+  },
+  redAlertOverlayHidden: {
+    opacity: 0.08,
   },
   root: {
     flex: 1,
@@ -533,22 +577,31 @@ const styles = StyleSheet.create({
     borderColor: "#ECEEF2",
     alignItems: "center",
     justifyContent: "center",
-    paddingTop: 4,
-    paddingBottom: 4,
+    paddingTop: 0,
+    paddingBottom: 10,
+    shadowColor: "#F8FAFC",
+    shadowOpacity: 0.24,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: -1 },
   },
   directionArrow: {
     fontWeight: "900",
-    color: "#404856",
+    color: "#DCE2EA",
     textAlign: "center",
-    marginBottom: -10,
+    marginBottom: -18,
+    textShadowColor: "rgba(76, 85, 99, 0.45)",
+    textShadowOffset: { width: 0, height: 4 },
+    textShadowRadius: 4,
+    transform: [{ scaleX: 1.18 }, { scaleY: 1.08 }],
   },
   directionLabel: {
-    marginTop: -6,
-    fontSize: 32,
-    lineHeight: 36,
+    marginTop: -2,
+    fontSize: 40,
+    lineHeight: 44,
     fontWeight: "900",
     color: "#2A313D",
     textAlign: "center",
+    letterSpacing: -1.2,
   },
   bottomBarShell: {
     position: "absolute",
@@ -556,49 +609,55 @@ const styles = StyleSheet.create({
     right: 8,
     bottom: 2,
     marginTop: 0,
-    borderRadius: 18,
-    padding: 2,
-    backgroundColor: "#A7ADB6",
+    borderRadius: 26,
+    padding: 3,
+    backgroundColor: "rgba(173, 180, 191, 0.82)",
     borderWidth: 1,
-    borderColor: "#E5E8ED",
+    borderColor: "rgba(244, 247, 251, 0.95)",
     shadowColor: "#7F8690",
-    shadowOpacity: 0.2,
-    shadowRadius: 7,
-    shadowOffset: { width: 0, height: 3 },
-    elevation: 3,
+    shadowOpacity: 0.28,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 5,
   },
   bottomBar: {
-    minHeight: 34,
-    borderRadius: 16,
-    backgroundColor: "#D0D3D9",
+    minHeight: 62,
+    borderRadius: 23,
+    backgroundColor: "rgba(224, 229, 236, 0.78)",
     borderWidth: 1,
-    borderColor: "#ECEEF2",
+    borderColor: "rgba(248, 250, 252, 0.98)",
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingHorizontal: 6,
-    gap: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+    gap: 8,
   },
   bottomButton: {
     flex: 1,
-    minHeight: 26,
-    borderRadius: 12,
-    backgroundColor: "#E1E4E9",
+    minHeight: 50,
+    borderRadius: 18,
+    backgroundColor: "rgba(239, 242, 246, 0.88)",
     borderWidth: 1,
-    borderColor: "#F5F7FA",
+    borderColor: "rgba(255, 255, 255, 0.98)",
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: 4,
+    gap: 8,
+    shadowColor: "#FFFFFF",
+    shadowOpacity: 0.16,
+    shadowRadius: 4,
+    shadowOffset: { width: 0, height: -1 },
   },
   bottomButtonPressed: {
-    opacity: 0.92,
-    transform: [{ scale: 0.985 }],
+    opacity: 0.94,
+    transform: [{ scale: 0.99 }],
   },
   bottomButtonText: {
-    fontSize: 11,
-    lineHeight: 13,
-    fontWeight: "800",
+    fontSize: 15,
+    lineHeight: 18,
+    fontWeight: "900",
     color: "#27303B",
+    letterSpacing: -0.3,
   },
 });
