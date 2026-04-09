@@ -7,11 +7,11 @@ describe("home hud layout regression", () => {
   const tabSource = readFileSync(join(process.cwd(), "app/(tabs)/_layout.tsx"), "utf8");
 
   it("restores the requested gray apple hud shell", () => {
-    expect(homeSource).toContain('backgroundColor: "#BFC3C9"');
+    expect(homeSource).toContain('backgroundColor: "#B7BBC2"');
     expect(homeSource).toContain("providerPill");
     expect(homeSource).toContain("mainStack");
     expect(homeSource).toContain("cardShell");
-    expect(homeSource).toContain('backgroundColor: "#D4D7DD"');
+    expect(homeSource).toContain('backgroundColor: "#D0D3D9"');
   });
 
   it("keeps the large traffic signal card with rotating go slow stop states", () => {
@@ -23,14 +23,20 @@ describe("home hud layout regression", () => {
     expect(homeSource).toContain('cardBackground: "#7EF36B"');
     expect(homeSource).toContain('cardBackground: "#FFE37A"');
     expect(homeSource).toContain('cardBackground: "#FF8F8A"');
+    expect(homeSource).toContain('justifyContent: "flex-start"');
+    expect(homeSource).toContain('paddingTop: 24');
+    expect(homeSource).toContain('marginTop: 74');
+    expect(homeSource).toContain('fontSize: 88');
   });
 
-  it("keeps the split distance and speed info panel without multiline clutter", () => {
-    expect(homeSource).toContain('남은 거리');
+  it("keeps only the enlarged speed panel in the middle info area", () => {
     expect(homeSource).toContain('현재 속도');
-    expect(homeSource).toContain('metricDivider');
+    expect(homeSource).toContain('speedOnlyColumn');
+    expect(homeSource).toContain('speedOnlyValue');
     expect(homeSource).toContain('signalDistanceLabel: "128m"');
     expect(homeSource).toContain('fallbackSpeedLabel: "18 km/h"');
+    expect(homeSource).not.toContain('metricDivider');
+    expect(homeSource).not.toContain('남은 거리');
     expect(homeSource).not.toContain('11개국어 스캔');
     expect(homeSource).not.toContain('AI 운전 보조 실시간 디스플레이');
   });
@@ -42,7 +48,8 @@ describe("home hud layout regression", () => {
     expect(homeSource).toContain('onPress={handleAdvanceDirection}');
     expect(homeSource).toContain('symbol: "↑"');
     expect(homeSource).toContain('label: "직진"');
-    expect(homeSource).toContain('fontSize: 24');
+    expect(homeSource).toContain('huge: 122');
+    expect(homeSource).toContain('fontSize: 32');
   });
 
   it("preserves gps linked updates and compact bottom controls", () => {

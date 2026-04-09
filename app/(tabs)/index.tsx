@@ -57,9 +57,9 @@ const PROVIDER_LABEL: Record<NavigationProvider, string> = {
 };
 
 const ARROW_FONT_SIZE: Record<ArrowSize, number> = {
-  large: 72,
-  xlarge: 82,
-  huge: 92,
+  large: 88,
+  xlarge: 102,
+  huge: 122,
 };
 
 const GPS_ROUTE_POINTS: RoutePoint[] = [
@@ -304,7 +304,7 @@ export default function HomeScreen() {
         </View>
 
         <View style={styles.mainStack}>
-          <View style={styles.cardShell}>
+          <View style={[styles.cardShell, styles.signalShell]}>
             <View
               accessibilityLabel={voicePreviewText}
               style={[
@@ -316,20 +316,15 @@ export default function HomeScreen() {
               ]}
             >
               <Text style={styles.signalTitle}>{currentSignal.title}</Text>
-              <Text style={styles.signalLabel}>{currentSignal.label}</Text>
+              <Text style={styles.signalDistanceValue}>{distanceValue}</Text>
             </View>
           </View>
 
-          <View style={styles.cardShell}>
+          <View style={[styles.cardShell, styles.infoShell]}>
             <View style={styles.infoCard}>
-              <View style={styles.metricColumn}>
-                <Text style={styles.metricLabel}>남은 거리</Text>
-                <Text style={styles.metricValue}>{distanceValue}</Text>
-              </View>
-              <View style={styles.metricDivider} />
-              <View style={styles.metricColumn}>
+              <View style={styles.speedOnlyColumn}>
                 <Text style={styles.metricLabel}>현재 속도</Text>
-                <Text style={styles.metricValue}>{speedValue}</Text>
+                <Text style={styles.speedOnlyValue}>{speedValue}</Text>
               </View>
             </View>
           </View>
@@ -387,11 +382,12 @@ export default function HomeScreen() {
 const styles = StyleSheet.create({
   screenContent: {
     flex: 1,
-    backgroundColor: "#BFC3C9",
+    backgroundColor: "#B7BBC2",
   },
   root: {
     flex: 1,
-    backgroundColor: "#BFC3C9",
+    position: "relative",
+    backgroundColor: "#B7BBC2",
     paddingHorizontal: 8,
     paddingTop: 2,
     paddingBottom: 4,
@@ -406,12 +402,12 @@ const styles = StyleSheet.create({
     borderRadius: 999,
     paddingHorizontal: 14,
     paddingVertical: 5,
-    backgroundColor: "#D8DBE0",
+    backgroundColor: "#D1D4DA",
     borderWidth: 1,
-    borderColor: "#EEF0F3",
-    shadowColor: "#8D929B",
-    shadowOpacity: 0.2,
-    shadowRadius: 5,
+    borderColor: "#ECEEF2",
+    shadowColor: "#8A9099",
+    shadowOpacity: 0.16,
+    shadowRadius: 4,
     shadowOffset: { width: 0, height: 2 },
     elevation: 2,
   },
@@ -420,83 +416,92 @@ const styles = StyleSheet.create({
     fontSize: 12,
     lineHeight: 14,
     fontWeight: "800",
-    color: "#49515D",
+    color: "#4F5661",
   },
   mainStack: {
-    flexGrow: 0,
-    flexShrink: 0,
-    gap: 8,
-    paddingTop: 3,
+    flex: 1,
+    gap: 6,
+    paddingTop: 2,
+    paddingBottom: 42,
   },
   cardShell: {
     borderRadius: 22,
     padding: 2,
-    backgroundColor: "#AEB3BB",
+    backgroundColor: "#A8ADB6",
     borderWidth: 1,
-    borderColor: "#E6E9EE",
-    shadowColor: "#8C929A",
+    borderColor: "#E5E8ED",
+    shadowColor: "#7F8690",
     shadowOpacity: 0.22,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 4 },
+    shadowRadius: 7,
+    shadowOffset: { width: 0, height: 3 },
     elevation: 3,
+  },
+  signalShell: {
+    flex: 1.72,
+  },
+  infoShell: {
+    flex: 0.68,
   },
   pressedCardShell: {
     opacity: 0.94,
     transform: [{ scale: 0.992 }],
   },
   signalCard: {
-    minHeight: 178,
+    flex: 1,
+    minHeight: 272,
     borderRadius: 20,
     alignItems: "center",
-    justifyContent: "center",
-    shadowOpacity: 0.24,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 4 },
+    justifyContent: "flex-start",
+    paddingTop: 24,
+    paddingBottom: 26,
+    borderWidth: 1,
+    borderColor: "rgba(236, 241, 244, 0.9)",
+    shadowOpacity: 0.18,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 3 },
     elevation: 2,
   },
   signalTitle: {
-    fontSize: 54,
-    lineHeight: 58,
+    fontSize: 48,
+    lineHeight: 52,
     fontWeight: "900",
-    color: "#F7FAFC",
-    textShadowColor: "rgba(95, 103, 112, 0.35)",
+    color: "#F6F8FA",
+    letterSpacing: -1,
+    textShadowColor: "rgba(103, 109, 118, 0.32)",
     textShadowOffset: { width: 0, height: 2 },
     textShadowRadius: 3,
   },
-  signalLabel: {
-    marginTop: 6,
-    fontSize: 24,
-    lineHeight: 28,
-    fontWeight: "900",
-    color: "#F7FAFC",
-    textShadowColor: "rgba(95, 103, 112, 0.32)",
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 2,
+  signalDistanceValue: {
+    marginTop: 74,
+    fontSize: 88,
+    lineHeight: 92,
+    fontWeight: "700",
+    color: "#111111",
+    textAlign: "center",
+    letterSpacing: -2.6,
   },
   infoCard: {
-    minHeight: 102,
-    borderRadius: 20,
-    backgroundColor: "#D4D7DD",
-    flexDirection: "row",
-    alignItems: "center",
-  },
-  metricColumn: {
     flex: 1,
+    minHeight: 110,
+    borderRadius: 20,
+    backgroundColor: "#D0D3D9",
+    borderWidth: 1,
+    borderColor: "#ECEEF2",
     alignItems: "center",
     justifyContent: "center",
-    paddingHorizontal: 8,
   },
-  metricDivider: {
-    width: 1,
-    alignSelf: "stretch",
-    backgroundColor: "#B5BBC4",
-    marginVertical: 16,
+  speedOnlyColumn: {
+    flex: 1,
+    width: "100%",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 12,
   },
   metricLabel: {
     fontSize: 17,
     lineHeight: 20,
     fontWeight: "800",
-    color: "#5A6270",
+    color: "#646C79",
     textAlign: "center",
   },
   metricValue: {
@@ -504,53 +509,70 @@ const styles = StyleSheet.create({
     fontSize: 19,
     lineHeight: 22,
     fontWeight: "900",
-    color: "#161C27",
+    color: "#1C2430",
     textAlign: "center",
   },
+  speedOnlyValue: {
+    marginTop: 6,
+    fontSize: 38,
+    lineHeight: 42,
+    fontWeight: "900",
+    color: "#1C2430",
+    textAlign: "center",
+    letterSpacing: -1.2,
+  },
   directionShell: {
-    flexGrow: 0,
-    flexShrink: 0,
+    flex: 1.08,
   },
   directionCard: {
-    minHeight: 108,
+    flex: 1,
+    minHeight: 126,
     borderRadius: 20,
-    backgroundColor: "#D4D7DD",
+    backgroundColor: "#D0D3D9",
+    borderWidth: 1,
+    borderColor: "#ECEEF2",
     alignItems: "center",
     justifyContent: "center",
-    paddingTop: 2,
-    paddingBottom: 2,
+    paddingTop: 4,
+    paddingBottom: 4,
   },
   directionArrow: {
     fontWeight: "900",
-    color: "#343C49",
+    color: "#404856",
     textAlign: "center",
     marginBottom: -10,
   },
   directionLabel: {
-    marginTop: -8,
-    fontSize: 24,
-    lineHeight: 28,
+    marginTop: -6,
+    fontSize: 32,
+    lineHeight: 36,
     fontWeight: "900",
-    color: "#202733",
+    color: "#2A313D",
     textAlign: "center",
   },
   bottomBarShell: {
+    position: "absolute",
+    left: 8,
+    right: 8,
+    bottom: 2,
     marginTop: 0,
     borderRadius: 18,
     padding: 2,
-    backgroundColor: "#AEB3BB",
+    backgroundColor: "#A7ADB6",
     borderWidth: 1,
-    borderColor: "#E6E9EE",
-    shadowColor: "#8C929A",
+    borderColor: "#E5E8ED",
+    shadowColor: "#7F8690",
     shadowOpacity: 0.2,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 4 },
+    shadowRadius: 7,
+    shadowOffset: { width: 0, height: 3 },
     elevation: 3,
   },
   bottomBar: {
     minHeight: 34,
     borderRadius: 16,
-    backgroundColor: "#D4D7DD",
+    backgroundColor: "#D0D3D9",
+    borderWidth: 1,
+    borderColor: "#ECEEF2",
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
@@ -561,9 +583,9 @@ const styles = StyleSheet.create({
     flex: 1,
     minHeight: 26,
     borderRadius: 12,
-    backgroundColor: "#E6E9EE",
+    backgroundColor: "#E1E4E9",
     borderWidth: 1,
-    borderColor: "#F4F6F8",
+    borderColor: "#F5F7FA",
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
@@ -577,6 +599,6 @@ const styles = StyleSheet.create({
     fontSize: 11,
     lineHeight: 13,
     fontWeight: "800",
-    color: "#1F2937",
+    color: "#27303B",
   },
 });
