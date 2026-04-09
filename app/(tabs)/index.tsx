@@ -207,7 +207,21 @@ const PEDESTRIAN_META: Record<PedestrianSignalState, { label: string; background
   },
 };
 
+function formatHudTime(timestamp: number) {
+  if (!timestamp) {
+    return "--:--:--";
+  }
+
+  return new Date(timestamp).toLocaleTimeString("ko-KR", {
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false,
+  });
+}
+
 export default function HomeScreen() {
+  const initialDetection = getTrafficSignalDetection();
   const [signalIndex, setSignalIndex] = useState(1);
   const [directionIndex, setDirectionIndex] = useState(0);
   const [voiceGuideEnabled, setVoiceGuideEnabled] = useState(DEFAULT_SETTINGS.voiceGuideEnabled);
@@ -225,14 +239,17 @@ export default function HomeScreen() {
   const [distanceValue, setDistanceValue] = useState(GPS_ROUTE_POINTS[0].signalDistanceLabel);
   const [speedValue, setSpeedValue] = useState(GPS_ROUTE_POINTS[0].fallbackSpeedLabel);
   const [redAlertVisible, setRedAlertVisible] = useState(false);
-  const [liveSignalState, setLiveSignalState] = useState<LiveSignalState>(getTrafficSignalDetection().state);
+  const [liveSignalState, setLiveSignalState] = useState<LiveSignalState>(initialDetection.state);
   const [liveLeftTurnState, setLiveLeftTurnState] = useState<LeftTurnSignalState>(
-    getTrafficSignalDetection().leftTurnState,
+    initialDetection.leftTurnState,
   );
   const [livePedestrianState, setLivePedestrianState] = useState<PedestrianSignalState>(
-    getTrafficSignalDetection().pedestrianState,
+    initialDetection.pedestrianState,
   );
-  const [liveSignalSummary, setLiveSignalSummary] = useState(getTrafficSignalDetection().summary);
+  const [liveSignalSummary, setLiveSignalSummary] = useState(initialDetection.summary);
+  const [monitoringActive, setMonitoringActive] = useState(initialDetection.monitoringActive);
+  const [lastAnalyzedAt, setLastAnalyzedAt] = useState(initialDetection.lastAnalyzedAt);
+  const [lastDetectedAt, setLastDetectedAt] = useState(initialDetection.detectedAt);
   const [homeMasterSettings, setHomeMasterSettings] = useState<HomeMasterSettings>(DEFAULT_HOME_MASTER_SETTINGS);
   const routeIndexRef = useRef(0);
   const locationSubscriptionRef = useRef<Location.LocationSubscription | null>(null);
@@ -297,6 +314,9 @@ export default function HomeScreen() {
       setLiveLeftTurnState(detection.leftTurnState);
       setLivePedestrianState(detection.pedestrianState);
       setLiveSignalSummary(detection.summary);
+      setMonitoringActive(detection.monitoringActive);
+      setLastAnalyzedAt(detection.lastAnalyzedAt);
+      setLastDetectedAt(detection.detectedAt);
     });
 
     loadTrafficSignalDetection().catch((error) => {
@@ -398,6 +418,8 @@ export default function HomeScreen() {
   );
   const currentLeftTurnMeta = useMemo(() => LEFT_TURN_META[liveLeftTurnState], [liveLeftTurnState]);
   const currentPedestrianMeta = useMemo(() => PEDESTRIAN_META[livePedestrianState], [livePedestrianState]);
+  const lastAnalyzedLabel = useMemo(() => formatHudTime(lastAnalyzedAt), [lastAnalyzedAt]);
+  const lastDetectedLabel = useMemo(() => formatHudTime(lastDetectedAt), [lastDetectedAt]);
   const arrowFontSize = ARROW_FONT_SIZE[arrowSize];
   const sharedFontFamily = getFontFamilyForPreset(homeMasterSettings.fontPreset);
   const sharedFontWeight = getFontWeightForPreset(homeMasterSettings.fontPreset);
@@ -491,18 +513,40 @@ export default function HomeScreen() {
                 {liveSignalState !== "unknown" ? liveSignalSummary : distanceValue}
               </Text>
               <View style={styles.signalAssistRow}>
-                <View style={[styles.signalAssistChip, { backgroundColor: currentLeftTurnMeta.backgroundColor }]}>
-                  <Text style={[styles.signalAssistText, { color: currentLeftTurnMeta.textColor }]}>
+                <View style={[styles.signalAssistChip, { backgroundColor: currentLeftTurnMeta.backgroundColor }]}> 
+                  <Text style={[styles.signalAssistText, { color: currentLeftTurnMeta.textColor }]}> 
                     {currentLeftTurnMeta.label}
                   </Text>
                 </View>
-                <View style={[styles.signalAssistChip, { backgroundColor: currentPedestrianMeta.backgroundColor }]}>
-                  <Text style={[styles.signalAssistText, { color: currentPedestrianMeta.textColor }]}>
+                <View style={[styles.signalAssistChip, { backgroundColor: currentPedestrianMeta.backgroundColor }]}> 
+                  <Text style={[styles.signalAssistText, { color: currentPedestrianMeta.textColor }]}> 
                     {currentPedestrianMeta.label}
                   </Text>
                 </View>
               </View>
+              <View style={styles.monitoringRow}>
+                <View style={[
+                  styles.monitoringChip,
+                  monitoringActive ? styles.monitoringChipActive : styles.monitoringChipIdle,
+                ]}>
+                  <Text style={[
+                    styles.monitoringChipLabel,
+                    monitoringActive ? styles.monitoringChipLabelActive : styles.monitoringChipLabelIdle,
+                  ]}>
+                    {monitoringActive ? "실시간 스캔 ON" : "실시간 스캔 OFF"}
+                  </Text>
+                </View>
+                <View style={styles.monitoringInfoBox}>
+                  <Text style={styles.monitoringInfoLabel}>최근 스캔</Text>
+                  <Text style={styles.monitoringInfoValue}>{lastAnalyzedLabel}</Text>
+                </View>
+                <View style={styles.monitoringInfoBox}>
+                  <Text style={styles.monitoringInfoLabel}>최근 감지</Text>
+                  <Text style={styles.monitoringInfoValue}>{lastDetectedLabel}</Text>
+                </View>
+              </View>
             </View>
+
           </View>
 
           <View style={[styles.cardShell, styles.infoShell, shellTransform("speed")]}> 
@@ -735,6 +779,57 @@ const styles = StyleSheet.create({
     fontWeight: "900",
     textAlign: "center",
     letterSpacing: -0.2,
+  },
+  monitoringRow: {
+    marginTop: 12,
+    width: "100%",
+    paddingHorizontal: 12,
+    gap: 8,
+  },
+  monitoringChip: {
+    minHeight: 36,
+    borderRadius: 14,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+  },
+  monitoringChipActive: {
+    backgroundColor: "rgba(220, 252, 231, 0.9)",
+  },
+  monitoringChipIdle: {
+    backgroundColor: "rgba(226, 232, 240, 0.88)",
+  },
+  monitoringChipLabel: {
+    fontSize: 16,
+    lineHeight: 18,
+    fontWeight: "900",
+    textAlign: "center",
+  },
+  monitoringChipLabelActive: {
+    color: "#166534",
+  },
+  monitoringChipLabelIdle: {
+    color: "#334155",
+  },
+  monitoringInfoBox: {
+    borderRadius: 14,
+    backgroundColor: "rgba(248, 250, 252, 0.32)",
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
+  monitoringInfoLabel: {
+    fontSize: 13,
+    lineHeight: 16,
+    fontWeight: "800",
+    color: "rgba(255, 255, 255, 0.78)",
+  },
+  monitoringInfoValue: {
+    marginTop: 2,
+    fontSize: 18,
+    lineHeight: 21,
+    fontWeight: "900",
+    color: "#F8FAFC",
   },
   infoCard: {
     flex: 1,

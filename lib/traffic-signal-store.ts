@@ -12,6 +12,8 @@ export type TrafficSignalDetection = {
   confidence: number;
   source: "camera-ai" | "fallback" | "manual";
   detectedAt: number;
+  lastAnalyzedAt: number;
+  monitoringActive: boolean;
   summary: string;
 };
 
@@ -24,6 +26,8 @@ export const DEFAULT_TRAFFIC_SIGNAL_DETECTION: TrafficSignalDetection = {
   confidence: 0,
   source: "fallback",
   detectedAt: 0,
+  lastAnalyzedAt: 0,
+  monitoringActive: false,
   summary: "신호 인식 대기",
 };
 
@@ -71,6 +75,13 @@ function normalizeDetection(
       typeof value?.detectedAt === "number" && Number.isFinite(value.detectedAt)
         ? value.detectedAt
         : DEFAULT_TRAFFIC_SIGNAL_DETECTION.detectedAt,
+    lastAnalyzedAt:
+      typeof value?.lastAnalyzedAt === "number" && Number.isFinite(value.lastAnalyzedAt)
+        ? value.lastAnalyzedAt
+        : DEFAULT_TRAFFIC_SIGNAL_DETECTION.lastAnalyzedAt,
+    monitoringActive: typeof value?.monitoringActive === "boolean"
+      ? value.monitoringActive
+      : DEFAULT_TRAFFIC_SIGNAL_DETECTION.monitoringActive,
     summary: value?.summary?.trim() || DEFAULT_TRAFFIC_SIGNAL_DETECTION.summary,
   };
 }
@@ -103,7 +114,8 @@ export async function setTrafficSignalDetection(value: Partial<TrafficSignalDete
   currentDetection = normalizeDetection({
     ...currentDetection,
     ...value,
-    detectedAt: value.detectedAt ?? Date.now(),
+    detectedAt: value.detectedAt ?? currentDetection.detectedAt,
+    lastAnalyzedAt: value.lastAnalyzedAt ?? Date.now(),
   });
 
   emit(currentDetection);

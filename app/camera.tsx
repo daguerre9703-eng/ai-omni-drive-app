@@ -1,7 +1,7 @@
 import MaterialIcons from "@expo/vector-icons/MaterialIcons";
 import { CameraView, useCameraPermissions } from "expo-camera";
 import { router } from "expo-router";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -15,6 +15,7 @@ import {
 import { ScreenContainer } from "@/components/screen-container";
 import { trpc } from "@/lib/trpc";
 import {
+  getTrafficSignalDetection,
   type DetectionRange,
   setTrafficSignalDetection,
 } from "@/lib/traffic-signal-store";
@@ -67,16 +68,45 @@ const RANGE_CROP: Record<DetectionRange, { widthRatio: number; heightRatio: numb
   넓게: { widthRatio: 0.56, heightRatio: 0.4 },
 };
 
+const AUTO_SCAN_INTERVAL_MS = 2200;
+
+function formatClockLabel(timestamp: number) {
+  if (!timestamp) {
+    return "아직 없음";
+  }
+
+  return new Date(timestamp).toLocaleTimeString("ko-KR", {
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false,
+  });
+}
+
 export default function CameraScreen() {
+  const initialDetection = getTrafficSignalDetection();
   const [selectedRange, setSelectedRange] = useState<DetectionRange>("보통");
   const [isAnalyzing, setIsAnalyzing] = useState(false);
-  const [liveStatusText, setLiveStatusText] = useState("AI 인식 대기");
-  const [latestResultText, setLatestResultText] = useState("아직 인식된 신호가 없습니다.");
+  const [isMonitoring, setIsMonitoring] = useState(initialDetection.monitoringActive);
+  const [liveStatusText, setLiveStatusText] = useState(
+    initialDetection.monitoringActive ? "실시간 스캔 준비 중" : "AI 인식 대기",
+  );
+  const [latestResultText, setLatestResultText] = useState(
+    initialDetection.summary === "신호 인식 대기"
+      ? "아직 인식된 신호가 없습니다."
+      : initialDetection.summary,
+  );
   const [latestDetailText, setLatestDetailText] = useState("좌회전·보행 신호 대기");
   const [cameraReady, setCameraReady] = useState(false);
+  const [lastAnalyzedAt, setLastAnalyzedAt] = useState(initialDetection.lastAnalyzedAt);
+  const [lastDetectedAt, setLastDetectedAt] = useState(initialDetection.detectedAt);
   const [permission, requestPermission] = useCameraPermissions();
   const cameraRef = useRef<CameraView | null>(null);
-  const lastDetectedStateRef = useRef<"red" | "yellow" | "green" | "unknown" | null>(null);
+  const isAnalyzingRef = useRef(false);
+  const monitoringActiveRef = useRef(initialDetection.monitoringActive);
+  const lastDetectedStateRef = useRef<"red" | "yellow" | "green" | "unknown" | null>(
+    initialDetection.state,
+  );
 
   const detectSignal = trpc.trafficSignal.detect.useMutation();
 
@@ -84,13 +114,18 @@ export default function CameraScreen() {
     return RANGE_OPTIONS.find((option) => option.key === selectedRange) ?? RANGE_OPTIONS[1];
   }, [selectedRange]);
 
+  const lastAnalyzedLabel = useMemo(() => formatClockLabel(lastAnalyzedAt), [lastAnalyzedAt]);
+  const lastDetectedLabel = useMemo(() => formatClockLabel(lastDetectedAt), [lastDetectedAt]);
+
   useEffect(() => {
     return () => {
       cameraRef.current = null;
+      monitoringActiveRef.current = false;
+      void setTrafficSignalDetection({ monitoringActive: false });
     };
   }, []);
 
-  const ensurePermission = async () => {
+  const ensurePermission = useCallback(async () => {
     if (!permission) {
       return false;
     }
@@ -101,88 +136,184 @@ export default function CameraScreen() {
 
     const nextPermission = await requestPermission();
     return nextPermission.granted;
-  };
+  }, [permission, requestPermission]);
 
-  const handleConfirmRange = () => {
-    Alert.alert("카메라 범위 적용", `${currentRange.title} 범위로 인식 영역을 맞췄습니다.`, [
-      {
-        text: "확인",
-      },
-    ]);
-  };
+  const runSignalAnalysis = useCallback(
+    async (trigger: "manual" | "auto") => {
+      if (Platform.OS === "web") {
+        if (trigger === "manual") {
+          Alert.alert("웹 미리보기 제한", "실제 카메라 인식은 모바일 기기에서 확인해 주세요.");
+        }
+        return false;
+      }
+
+      const granted = await ensurePermission();
+      if (!granted) {
+        if (trigger === "manual") {
+          Alert.alert("카메라 권한 필요", "신호등 인식을 위해 카메라 권한을 허용해 주세요.");
+        }
+        return false;
+      }
+
+      if (!cameraRef.current || !cameraReady || isAnalyzingRef.current) {
+        return false;
+      }
+
+      const analysisStartedAt = Date.now();
+
+      try {
+        isAnalyzingRef.current = true;
+        setIsAnalyzing(true);
+        setLastAnalyzedAt(analysisStartedAt);
+        setLiveStatusText(
+          monitoringActiveRef.current ? "실시간 스캔 중 · 전방 신호 확인" : "AI 신호등 판별 중",
+        );
+
+        const photo = await cameraRef.current.takePictureAsync({
+          base64: true,
+          quality: 0.45,
+          skipProcessing: true,
+        });
+
+        if (!photo?.base64) {
+          throw new Error("카메라 프레임을 가져오지 못했습니다.");
+        }
+
+        const crop = RANGE_CROP[selectedRange];
+        const result = await detectSignal.mutateAsync({
+          base64Image: photo.base64,
+          detectionRange: selectedRange,
+          cropHint: crop,
+        });
+
+        const detectedAt = Date.now();
+
+        await setTrafficSignalDetection({
+          state: result.signalState,
+          leftTurnState: result.leftTurnState,
+          pedestrianState: result.pedestrianState,
+          confidence: result.confidence,
+          source: "camera-ai",
+          detectedAt,
+          lastAnalyzedAt: detectedAt,
+          monitoringActive: monitoringActiveRef.current,
+          summary: result.summary,
+        });
+
+        setLastAnalyzedAt(detectedAt);
+        setLastDetectedAt(detectedAt);
+        setLatestResultText(`${result.displayLabel} · 신뢰도 ${Math.round(result.confidence * 100)}%`);
+        setLatestDetailText(`${result.leftTurnLabel} · ${result.pedestrianLabel}`);
+        setLiveStatusText(
+          monitoringActiveRef.current
+            ? `실시간 스캔 중 · ${result.displayLabel}`
+            : `수동 인식 완료 · ${result.displayLabel}`,
+        );
+
+        const previousState = lastDetectedStateRef.current;
+        lastDetectedStateRef.current = result.signalState;
+
+        if (result.signalState !== previousState) {
+          if (result.signalState === "red") {
+            await speakVoiceAlert("red_signal_ahead", DEFAULT_VOICE_ALERT_SETTINGS, {
+              distanceMeters: 128,
+            });
+          } else if (result.signalState === "green") {
+            await speakVoiceAlert("green_signal_changed", DEFAULT_VOICE_ALERT_SETTINGS, {
+              distanceMeters: 128,
+            });
+          }
+        }
+
+        return true;
+      } catch (error) {
+        console.error("Failed to analyze traffic signal", error);
+        setLastAnalyzedAt(analysisStartedAt);
+        setLiveStatusText(
+          monitoringActiveRef.current ? "실시간 스캔 재시도 중" : "AI 인식 실패",
+        );
+
+        await setTrafficSignalDetection({
+          lastAnalyzedAt: analysisStartedAt,
+          monitoringActive: monitoringActiveRef.current,
+          summary: monitoringActiveRef.current ? "실시간 스캔 재시도 중" : "AI 인식 실패",
+        });
+
+        if (trigger === "manual") {
+          Alert.alert("신호등 인식 실패", "카메라 프레임 분석 중 문제가 발생했습니다. 다시 시도해 주세요.");
+        }
+
+        return false;
+      } finally {
+        isAnalyzingRef.current = false;
+        setIsAnalyzing(false);
+      }
+    },
+    [cameraReady, detectSignal, ensurePermission, selectedRange],
+  );
+
+  useEffect(() => {
+    monitoringActiveRef.current = isMonitoring;
+    void setTrafficSignalDetection({ monitoringActive: isMonitoring });
+
+    if (!isMonitoring) {
+      setLiveStatusText((current) =>
+        current.startsWith("실시간") ? "실시간 스캔 중지" : current,
+      );
+      return;
+    }
+
+    setLiveStatusText("실시간 스캔 준비 중");
+  }, [isMonitoring]);
+
+  useEffect(() => {
+    if (!isMonitoring || !cameraReady || Platform.OS === "web" || !permission?.granted) {
+      return;
+    }
+
+    let active = true;
+
+    const runLoop = async () => {
+      if (!active) {
+        return;
+      }
+
+      await runSignalAnalysis("auto");
+    };
+
+    void runLoop();
+    const timerId = setInterval(() => {
+      void runLoop();
+    }, AUTO_SCAN_INTERVAL_MS);
+
+    return () => {
+      active = false;
+      clearInterval(timerId);
+    };
+  }, [cameraReady, isMonitoring, permission?.granted, runSignalAnalysis]);
 
   const handleAnalyzeFrame = async () => {
+    await runSignalAnalysis("manual");
+  };
+
+  const handleToggleMonitoring = async () => {
+    if (isMonitoring) {
+      setIsMonitoring(false);
+      return;
+    }
+
     if (Platform.OS === "web") {
-      Alert.alert("웹 미리보기 제한", "실제 카메라 인식은 모바일 기기에서 확인해 주세요.");
+      Alert.alert("웹 미리보기 제한", "실시간 카메라 스캔은 모바일 기기에서 확인해 주세요.");
       return;
     }
 
     const granted = await ensurePermission();
     if (!granted) {
-      Alert.alert("카메라 권한 필요", "신호등 인식을 위해 카메라 권한을 허용해 주세요.");
+      Alert.alert("카메라 권한 필요", "실시간 스캔을 위해 카메라 권한을 허용해 주세요.");
       return;
     }
 
-    if (!cameraRef.current || !cameraReady || isAnalyzing) {
-      return;
-    }
-
-    try {
-      setIsAnalyzing(true);
-      setLiveStatusText("AI 신호등 판별 중");
-
-      const photo = await cameraRef.current.takePictureAsync({
-        base64: true,
-        quality: 0.45,
-        skipProcessing: true,
-      });
-
-      if (!photo?.base64) {
-        throw new Error("카메라 프레임을 가져오지 못했습니다.");
-      }
-
-      const crop = RANGE_CROP[selectedRange];
-      const result = await detectSignal.mutateAsync({
-        base64Image: photo.base64,
-        detectionRange: selectedRange,
-        cropHint: crop,
-      });
-
-      await setTrafficSignalDetection({
-        state: result.signalState,
-        leftTurnState: result.leftTurnState,
-        pedestrianState: result.pedestrianState,
-        confidence: result.confidence,
-        source: "camera-ai",
-        detectedAt: Date.now(),
-        summary: result.summary,
-      });
-
-      setLatestResultText(`${result.displayLabel} · 신뢰도 ${Math.round(result.confidence * 100)}%`);
-      setLatestDetailText(`${result.leftTurnLabel} · ${result.pedestrianLabel}`);
-      setLiveStatusText(`실시간 인식: ${result.displayLabel}`);
-
-      const previousState = lastDetectedStateRef.current;
-      lastDetectedStateRef.current = result.signalState;
-
-      if (result.signalState !== previousState) {
-        if (result.signalState === "red") {
-          await speakVoiceAlert("red_signal_ahead", DEFAULT_VOICE_ALERT_SETTINGS, {
-            distanceMeters: 128,
-          });
-        } else if (result.signalState === "green") {
-          await speakVoiceAlert("green_signal_changed", DEFAULT_VOICE_ALERT_SETTINGS, {
-            distanceMeters: 128,
-          });
-        }
-      }
-    } catch (error) {
-      console.error("Failed to analyze traffic signal", error);
-      setLiveStatusText("AI 인식 실패");
-      Alert.alert("신호등 인식 실패", "카메라 프레임 분석 중 문제가 발생했습니다. 다시 시도해 주세요.");
-    } finally {
-      setIsAnalyzing(false);
-    }
+    setIsMonitoring(true);
   };
 
   return (
@@ -205,8 +336,15 @@ export default function CameraScreen() {
 
         <View style={styles.previewCard}>
           <View style={styles.previewTopRow}>
-            <View style={styles.liveBadge}>
-              <Text style={styles.liveBadgeText}>{liveStatusText}</Text>
+            <View style={styles.topBadgeRow}>
+              <View style={styles.liveBadge}>
+                <Text style={styles.liveBadgeText}>{liveStatusText}</Text>
+              </View>
+              <View style={[styles.scanStateBadge, isMonitoring && styles.scanStateBadgeActive]}>
+                <Text style={[styles.scanStateBadgeText, isMonitoring && styles.scanStateBadgeTextActive]}>
+                  {isMonitoring ? "연속 스캔 켜짐" : "연속 스캔 꺼짐"}
+                </Text>
+              </View>
             </View>
             <Text style={styles.previewHint}>전방 신호등 중심으로 맞춰 주세요</Text>
           </View>
@@ -256,7 +394,7 @@ export default function CameraScreen() {
           <View style={styles.rangeCard}>
             <Text style={styles.sectionTitle}>인식 범위 조절</Text>
             <Text style={styles.sectionBody}>
-              슬라이더 대신 큰 단계 버튼으로 조절할 수 있게 구성했습니다. 주행 중에는 한 번 눌러도 범위가 바로 바뀝니다.
+              슬라이더 대신 큰 단계 버튼으로 조절할 수 있게 구성했습니다. 연속 스캔 중에도 범위를 바꾸면 다음 프레임부터 바로 반영됩니다.
             </Text>
 
             <View style={styles.rangeButtonRow}>
@@ -297,6 +435,16 @@ export default function CameraScreen() {
             <Text style={styles.summaryDescription}>{RANGE_FOCUS_HINT[currentRange.key]}</Text>
             <Text style={styles.summaryMeta}>{latestResultText}</Text>
             <Text style={styles.summarySubMeta}>{latestDetailText}</Text>
+            <View style={styles.summaryInfoRow}>
+              <View style={styles.summaryInfoChip}>
+                <Text style={styles.summaryInfoLabel}>마지막 스캔</Text>
+                <Text style={styles.summaryInfoValue}>{lastAnalyzedLabel}</Text>
+              </View>
+              <View style={styles.summaryInfoChip}>
+                <Text style={styles.summaryInfoLabel}>마지막 감지</Text>
+                <Text style={styles.summaryInfoValue}>{lastDetectedLabel}</Text>
+              </View>
+            </View>
           </View>
         </View>
 
@@ -313,10 +461,16 @@ export default function CameraScreen() {
         <View style={styles.actionRow}>
           <Pressable
             accessibilityRole="button"
-            onPress={handleConfirmRange}
-            style={({ pressed }) => [styles.secondaryButton, pressed && styles.buttonPressed]}
+            onPress={handleToggleMonitoring}
+            style={({ pressed }) => [
+              styles.secondaryButton,
+              isMonitoring && styles.secondaryButtonActive,
+              pressed && styles.buttonPressed,
+            ]}
           >
-            <Text style={styles.secondaryButtonText}>범위 적용</Text>
+            <Text style={[styles.secondaryButtonText, isMonitoring && styles.secondaryButtonTextActive]}>
+              {isMonitoring ? "실시간 중지" : "실시간 시작"}
+            </Text>
           </Pressable>
 
           <Pressable
@@ -391,6 +545,12 @@ const styles = StyleSheet.create({
   previewTopRow: {
     gap: 8,
   },
+  topBadgeRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+    alignItems: "center",
+  },
   liveBadge: {
     alignSelf: "flex-start",
     borderRadius: 999,
@@ -402,6 +562,23 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: "bold",
     color: "#ffffff",
+  },
+  scanStateBadge: {
+    borderRadius: 999,
+    backgroundColor: "#e5e7eb",
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+  },
+  scanStateBadgeActive: {
+    backgroundColor: "#dcfce7",
+  },
+  scanStateBadgeText: {
+    fontSize: 16,
+    fontWeight: "800",
+    color: "#374151",
+  },
+  scanStateBadgeTextActive: {
+    color: "#166534",
   },
   previewHint: {
     fontSize: 20,
@@ -586,6 +763,29 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     color: "#cbd5e1",
   },
+  summaryInfoRow: {
+    marginTop: 10,
+    flexDirection: "row",
+    gap: 10,
+  },
+  summaryInfoChip: {
+    flex: 1,
+    borderRadius: 18,
+    backgroundColor: "rgba(255, 255, 255, 0.08)",
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    gap: 2,
+  },
+  summaryInfoLabel: {
+    fontSize: 14,
+    fontWeight: "800",
+    color: "#94a3b8",
+  },
+  summaryInfoValue: {
+    fontSize: 18,
+    fontWeight: "900",
+    color: "#ffffff",
+  },
   permissionButton: {
     marginTop: 14,
     borderRadius: 24,
@@ -612,10 +812,16 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     paddingVertical: 18,
   },
+  secondaryButtonActive: {
+    backgroundColor: "#dcfce7",
+  },
   secondaryButtonText: {
     fontSize: 22,
     fontWeight: "bold",
     color: "#0f172a",
+  },
+  secondaryButtonTextActive: {
+    color: "#166534",
   },
   confirmButton: {
     flex: 1.2,
