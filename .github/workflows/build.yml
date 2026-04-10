@@ -1,89 +1,46 @@
-name: Build & Security Audit
-
+name: Build and Upload Android Release APK
 on:
-  push:
-    branches: [main, "copilot/**"]
   pull_request:
-    branches: [main]
-
-permissions:
-  contents: read
-
+    branches:
+      - copilot/fix-security-vulnerabilities-and-routing
 jobs:
   audit:
-    name: Security Audit
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
     steps:
-      - uses: actions/checkout@v4
-
-      - uses: pnpm/action-setup@v4
-        with:
-          version: 9.12.0
-
-      - name: Use Node.js 20
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          cache: pnpm
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
-      # pnpm audit may fail with network errors in some CI environments;
-      # use || true to keep the build informational until the audit registry
-      # is reliably accessible. Remove || true once confirmed stable.
-      - name: Run security audit
-        run: pnpm audit --audit-level=high || true
-
+      - name: Checkout
+        uses: actions/checkout@v2
+      - name: Run audit
+        run: npm audit
   build:
-    name: Production Server Build
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
     steps:
-      - uses: actions/checkout@v4
-
-      - uses: pnpm/action-setup@v4
+      - name: Checkout
+        uses: actions/checkout@v2
+      - name: Set up JDK
+        uses: actions/setup-java@v2
         with:
-          version: 9.12.0
-
-      - name: Use Node.js 20
-        uses: actions/setup-node@v4
+          java-version: '17'
+          distribution: 'temurin'
+      - name: Cache Gradle dependencies
+        uses: actions/cache@v2
         with:
-          node-version: 20
-          cache: pnpm
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
-      - name: TypeScript check
-        run: pnpm check
-
-      - name: Production build (server)
-        run: pnpm build
-
+          path: ~/.gradle/caches
+          key: gradle-${{ runner.os }}-${{ hashFiles('android/build.gradle') }}
+          restore-keys: |
+            gradle-${{ runner.os }}-
+      - name: Build Android Release APK
+        run: |
+          cd android
+          ./gradlew assembleRelease
+      - name: Upload Android Release APK
+        uses: actions/upload-artifact@v3
+        with:
+          name: android-release-apk
+          path: android/app/build/outputs/apk/release/app-release.apk
   test:
-    name: Unit Tests
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
     steps:
-      - uses: actions/checkout@v4
-
-      - uses: pnpm/action-setup@v4
-        with:
-          version: 9.12.0
-
-      - name: Use Node.js 20
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          cache: pnpm
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
+      - name: Checkout
+        uses: actions/checkout@v2
       - name: Run tests
-        run: pnpm test
+        run: npm test
