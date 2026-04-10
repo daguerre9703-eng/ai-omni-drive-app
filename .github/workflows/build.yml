@@ -1,8 +1,9 @@
 name: Build and Upload Android Release APK
 on:
-  pull_request:
+  push:
     branches:
       - copilot/fix-security-vulnerabilities-and-routing
+  workflow_dispatch:
 jobs:
   audit:
     runs-on: ubuntu-latest
