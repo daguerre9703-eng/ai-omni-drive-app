@@ -1,0 +1,47 @@
+name: Build and Upload Android Release APK
+on:
+  push:
+    branches:
+      - copilot/fix-security-vulnerabilities-and-routing
+  workflow_dispatch:
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+      - name: Run audit
+        run: npm audit
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+      - name: Set up JDK
+        uses: actions/setup-java@v2
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+      - name: Cache Gradle dependencies
+        uses: actions/cache@v2
+        with:
+          path: ~/.gradle/caches
+          key: gradle-${{ runner.os }}-${{ hashFiles('android/build.gradle') }}
+          restore-keys: |
+            gradle-${{ runner.os }}-
+      - name: Build Android Release APK
+        run: |
+          cd android
+          ./gradlew assembleRelease
+      - name: Upload Android Release APK
+        uses: actions/upload-artifact@v3
+        with:
+          name: android-release-apk
+          path: android/app/build/outputs/apk/release/app-release.apk
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+      - name: Run tests
+        run: npm test
