@@ -56,6 +56,7 @@ type ArrowSize = "large" | "xlarge" | "huge";
 
 type AppSettings = {
   voiceGuideEnabled: boolean;
+  alwaysListening: boolean;
   voiceAlertLength: VoiceAlertLength;
   voiceAlertStyle: VoiceAlertStyle;
   liveRouteSyncEnabled: boolean;
@@ -82,6 +83,7 @@ const POSITION_LIMIT_Y = 38;
 
 const DEFAULT_SETTINGS: AppSettings = {
   voiceGuideEnabled: DEFAULT_VOICE_ALERT_SETTINGS.enabled,
+  alwaysListening: false,
   voiceAlertLength: DEFAULT_VOICE_ALERT_SETTINGS.length,
   voiceAlertStyle: DEFAULT_VOICE_ALERT_SETTINGS.style,
   liveRouteSyncEnabled: true,
@@ -330,6 +332,7 @@ function SliderControl({
 
 export default function SettingsScreen() {
   const [voiceGuideEnabled, setVoiceGuideEnabled] = useState(DEFAULT_SETTINGS.voiceGuideEnabled);
+  const [alwaysListening, setAlwaysListening] = useState(DEFAULT_SETTINGS.alwaysListening);
   const [voiceAlertLength, setVoiceAlertLength] = useState<VoiceAlertLength>(
     DEFAULT_SETTINGS.voiceAlertLength,
   );
@@ -389,6 +392,7 @@ export default function SettingsScreen() {
         if (savedValue && isMounted) {
           const parsed = JSON.parse(savedValue) as Partial<AppSettings>;
           setVoiceGuideEnabled(parsed.voiceGuideEnabled ?? DEFAULT_SETTINGS.voiceGuideEnabled);
+          setAlwaysListening(parsed.alwaysListening ?? DEFAULT_SETTINGS.alwaysListening);
           setVoiceAlertLength(parsed.voiceAlertLength ?? DEFAULT_SETTINGS.voiceAlertLength);
           setVoiceAlertStyle(parsed.voiceAlertStyle ?? DEFAULT_SETTINGS.voiceAlertStyle);
           setLiveRouteSyncEnabled(parsed.liveRouteSyncEnabled ?? DEFAULT_SETTINGS.liveRouteSyncEnabled);
@@ -726,6 +730,7 @@ export default function SettingsScreen() {
   const handleSave = async () => {
     const nextSettings: AppSettings = {
       voiceGuideEnabled,
+      alwaysListening,
       voiceAlertLength,
       voiceAlertStyle,
       liveRouteSyncEnabled,
@@ -810,6 +815,16 @@ export default function SettingsScreen() {
             </View>
             <Text style={styles.sectionDescription}>
               음성 안내를 끄면 HUD 문구만 갱신하고 소리는 출력하지 않습니다.
+            </Text>
+          </View>
+
+          <View style={styles.sectionCard}>
+            <View style={styles.sectionHeaderRow}>
+              <Text style={styles.sectionTitle}>마이크 상시 켜기</Text>
+              <Switch value={alwaysListening} onValueChange={setAlwaysListening} />
+            </View>
+            <Text style={styles.sectionDescription}>
+              켜면 "옴니야" 또는 "AI야" 호출어를 상시 감지하여 음성 명령으로 설정을 변경할 수 있습니다. 끄면 음성 인식이 완전히 비활성화됩니다.
             </Text>
           </View>
 

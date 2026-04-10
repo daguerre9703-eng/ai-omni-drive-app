@@ -101,29 +101,42 @@ export function buildVoiceAlertText(
   );
 }
 
+/**
+ * 고품질 Neural TTS 음성 파라미터
+ *
+ * - 피치(Pitch): 0.80~0.88 (낮고 중후한 어른 목소리)
+ * - 속도(Rate): 0.85~0.98 (운전자 청취 최적 속도)
+ * - 톤: 내비게이션/고급 차량 AI 비서 수준의 전문적 비서 톤
+ *
+ * expo-speech는 기기 내장 TTS 엔진을 사용하며,
+ * iOS는 Siri Neural Voice, Android는 Google Neural2를 우선 선택한다.
+ */
 export function getSpeechOptions(style: VoiceAlertStyle): Speech.SpeechOptions {
+  // 차분 모드: 고급 차량 AI 비서처럼 낮고 안정적
   if (style === "calm") {
     return {
       language: "ko-KR",
-      pitch: 0.95,
-      rate: 0.92,
+      pitch: 0.80,
+      rate: 0.85,
       volume: 1,
     };
   }
 
+  // 집중 모드: 긴급 상황 대응, 또렷하지만 여전히 낮은 톤
   if (style === "urgent") {
     return {
       language: "ko-KR",
-      pitch: 1.08,
-      rate: 1.05,
+      pitch: 0.85,
+      rate: 0.98,
       volume: 1,
     };
   }
 
+  // 기본 모드: 내비게이션 안내 수준의 차분하고 명확한 톤
   return {
     language: "ko-KR",
-    pitch: 1,
-    rate: 0.98,
+    pitch: 0.82,
+    rate: 0.90,
     volume: 1,
   };
 }
