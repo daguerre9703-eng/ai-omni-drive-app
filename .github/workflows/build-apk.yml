@@ -1,0 +1,46 @@
+name: Build Android APK
+
+on:
+  push:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Build APK
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 코드 다운로드
+        uses: actions/checkout@v4
+
+      - name: Node.js 설정
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: pnpm 설치
+        uses: pnpm/action-setup@v3
+        with:
+          version: 9
+
+      - name: Expo 설정
+        uses: expo/expo-github-action@v8
+        with:
+          expo-version: latest
+          eas-version: latest
+          token: ${{ secrets.EXPO_TOKEN }}
+
+      - name: 패키지 설치
+        run: pnpm install
+
+      - name: APK 빌드
+        run: eas build --platform android --profile production --non-interactive --no-wait
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+
+      - name: 빌드 상태 확인
+        run: |
+          echo "빌드가 시작되었습니다!"
+          echo "빌드 진행 상황: https://expo.dev/accounts/parkhyungi/projects/ai-omni-drive/builds"
+          echo "완료되면 이메일로 다운로드 링크가 전송됩니다!"
