@@ -77,4 +77,4 @@ describe("home hud layout regression", () => {
     expect(homeSource).toContain('밝기 {redAlertBrightnessLabel}');
     expect(homeSource).toContain('주기 {redAlertPeriodLabel}');
   });
-});
+}); .
